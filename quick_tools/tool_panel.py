@@ -11,17 +11,17 @@ class OriginToCenterOperator(bpy.types.Operator):
     bl_label = "Origin"
     bl_options = {"REGISTER", "UNDO"}
     def execute(self, context):
-        bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY') 
-        return {"FINISHED"}   
+        bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
+        return {"FINISHED"}
 
-# Broken File Fix    
+# Broken File Fix
 class RotateAround1Operator(bpy.types.Operator):
     bl_idname = "object.rotate_around_selection"
     bl_label = "Origin"
     bl_options = {"REGISTER", "UNDO"}
     def execute(self, context):
         print("awsome")
-        return {"FINISHED"}   
+        return {"FINISHED"}
 
 class RotateAround2(bpy.types.Operator):
     bl_idname = "object.modal_background_rotate_around"
@@ -29,9 +29,9 @@ class RotateAround2(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
     def execute(self, context):
         print("awsome")
-        return {"FINISHED"}   
-       
-#################################################   
+        return {"FINISHED"}
+
+#################################################
 # Setting Position
 def set_x_offset(self, value):
     set_keyframe_position(value, 0)
@@ -39,8 +39,8 @@ def set_y_offset(self, value):
     set_keyframe_position(value, 1)
 def set_z_offset(self, value):
     set_keyframe_position(value, 2)
-        
-# Display Amount     
+
+# Display Amount
 def get_x_offset(self):
     return display_keyframe_position(0)
 def get_y_offset(self):
@@ -50,10 +50,10 @@ def get_z_offset(self):
 
 
 ### Action Blending Offset ###
-def set_keyframe_position(value, index): 
+def set_keyframe_position(value, index):
     try:
-        keyframe_list = [] 
-        action = bpy.context.object.animation_data.action        
+        keyframe_list = []
+        action = bpy.context.object.animation_data.action
         current_frame = bpy.context.scene.frame_current
         # Add all Keyframes to list
         for keyframe in action.fcurves[0].keyframe_points:
@@ -67,7 +67,7 @@ def set_keyframe_position(value, index):
             bpy.context.scene.frame_current = current_frame
     except:
         pass
-    
+
 def display_keyframe_position(index):
     display_amount = 0.0
     keyframe_list = []
@@ -76,37 +76,37 @@ def display_keyframe_position(index):
         current_frame = bpy.context.scene.frame_current
         for keyframe in action.fcurves[0].keyframe_points:
             keyframe_list.append(keyframe.co[0])
-            
+
         if current_frame in keyframe_list:
             keyframe_index = keyframe_list.index(current_frame)
-            display_amount = action.fcurves[index].keyframe_points[keyframe_index].co[1]      
-        
+            display_amount = action.fcurves[index].keyframe_points[keyframe_index].co[1]
+
     except:
         display_amount = 0.0
-    
+
     return display_amount
-    
+
 bpy.types.Scene.xscale = FloatProperty(default=1.0, get=get_x_offset, set=set_x_offset)
 bpy.types.Scene.yscale = FloatProperty(default=1.0, get=get_y_offset, set=set_y_offset)
 bpy.types.Scene.zscale = FloatProperty(default=1.0, get=get_z_offset, set=set_z_offset)
-####################################################################### 
+#######################################################################
 
 ## Keyboard Functions ##
 class OverrideDeleteOperator(bpy.types.Operator):
     bl_idname = "object.overridedelete"
     bl_label = "Delete"
     bl_options = {"REGISTER", "UNDO"}
-    
-    def execute(self, context):        
+
+    def execute(self, context):
         bpy.ops.object.delete(use_global=True)
         self.report({'INFO'}, 'Deleted Object')
         return {"FINISHED"}
-        
+
 class AutoKeyFrameOperator(bpy.types.Operator):
     bl_idname = "object.autokeyframe"
     bl_label = ""
     bl_options = {"REGISTER", "UNDO"}
-    
+
     def execute(self, context):
         button_state = bpy.context.scene.tool_settings.use_keyframe_insert_auto
         bpy.context.scene.tool_settings.use_keyframe_insert_auto = not button_state
@@ -124,21 +124,21 @@ class SaveBackupOperator(bpy.types.Operator):
         file_location = bpy.context.blend_data.filepath
         file_name = bpy.path.display_name_from_filepath(file_location)
         num = 1
-        
+
         if file_location != "":
             # File Preperation
             full_name = file_name + ".blend"
             if file_location.endswith(full_name):
-                file_location = file_location[:-len(full_name)]        
+                file_location = file_location[:-len(full_name)]
             if not os.path.exists(file_location + "\\Backup"):
                 os.makedirs("Backup\\")
-            
+
             file_location = file_location + "Backup\\"
             print(file_location)
             # Check through saved copies
             while True:
                 temp_file = file_location + file_name + "_" + str(num).zfill(2) + ".blend"
-                    
+
                 if not os.path.isfile(temp_file):
                     bpy.ops.wm.save_as_mainfile(filepath=temp_file, copy=True)
                     break
@@ -146,8 +146,8 @@ class SaveBackupOperator(bpy.types.Operator):
             self.report({'INFO'}, 'Saved Incremental Backup: ' + file_name + "_" + str(num).zfill(2) + ".blend")
         else:
             self.report({'INFO'}, 'Please Save Blend File ')
-        return {"FINISHED"}  
-        
+        return {"FINISHED"}
+
 class SaveNormalOperator(bpy.types.Operator):
     bl_idname = "object.savenormal"
     bl_label = ""
@@ -158,7 +158,7 @@ class SaveNormalOperator(bpy.types.Operator):
         else:
             bpy.ops.wm.save_as_mainfile()
             self.report({'INFO'}, 'Saved Blend File')
-        return {"FINISHED"} 
+        return {"FINISHED"}
 
 class CreateDriversOperator(bpy.types.Operator):
     bl_idname = "object.create_drivers"
@@ -170,11 +170,11 @@ class CreateDriversOperator(bpy.types.Operator):
         for obj in selected:
             if obj.type == "EMPTY":
                 empty_list.append(obj)
-        
-        
+
+
         print(empty_list)
-        return {"FINISHED"} 
-        
+        return {"FINISHED"}
+
 class CenterGroupOperator(bpy.types.Operator):
     bl_idname = "object.centergroup"
     bl_label = ""
@@ -185,11 +185,11 @@ class CenterGroupOperator(bpy.types.Operator):
         for obj in selected:
             if len(obj.users_group) > 0:
                 obj.users_group[0].dupli_offset = bpy.context.scene.cursor_location
-        
-        bpy.ops.view3d.snap_cursor_to_center()
-        return {"FINISHED"} 
 
-#bpy.context.user_preferences.view.use_rotate_around_active = True        
+        bpy.ops.view3d.snap_cursor_to_center()
+        return {"FINISHED"}
+
+#bpy.context.user_preferences.view.use_rotate_around_active = True
 class EdgeDisplayOperator(bpy.types.Operator):
     bl_idname = "object.edgedisplay"
     bl_label = ""
@@ -199,17 +199,17 @@ class EdgeDisplayOperator(bpy.types.Operator):
         for object in bpy.data.objects:
             if object.type == 'MESH':
                 wireframe = object.show_wire
-        
+
         for ob in bpy.data.objects:
             if wireframe == True:
                 ob.show_wire = False
-                ob.show_all_edges = False             
+                ob.show_all_edges = False
             else:
                 ob.show_wire = True
-                ob.show_all_edges = True            
-       
-        return {"FINISHED"}  
-        
+                ob.show_all_edges = True
+
+        return {"FINISHED"}
+
 class WireFrameOperator(bpy.types.Operator):
     """Batch Export selected objects to FBX files.."""
     bl_idname = "object.wireframe"
@@ -219,46 +219,46 @@ class WireFrameOperator(bpy.types.Operator):
         try:
             selected = context.selected_objects
             active_obj = context.scene.objects.active
-            
-            type = active_obj.draw_type  
+
+            type = active_obj.draw_type
             if type == "TEXTURED":
                 type = "WIRE"
             elif type == "WIRE":
                 type = "TEXTURED"
-            
-            for mesh_obj in selected: 
+
+            for mesh_obj in selected:
                 mesh_obj.draw_type = type
         except:
             pass
-        return {"FINISHED"}   
-        
+        return {"FINISHED"}
+
 class OriginToCenterOperator(bpy.types.Operator):
     bl_idname = "object.origin_to_center"
     bl_label = "Origin"
     bl_options = {"REGISTER", "UNDO"}
     def execute(self, context):
-        bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY') 
-        return {"FINISHED"}  
+        bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
+        return {"FINISHED"}
 
 class AlignObjectsOperator(bpy.types.Operator):
     bl_idname = "object.align_objects"
     bl_label = ""
     bl_options = {"REGISTER", "UNDO"}
-    
+
     def execute(self, context):
         active_object = bpy.context.scene.objects.active
         pos = active_object.location
         rot = active_object.rotation_euler
         selected_objects = context.selected_objects
-        
+
         if len(selected_objects) == 1:
             selected_objects[0].location = bpy.context.scene.cursor_location
         else:
             for obj in selected_objects:
                 obj.location = pos
                 obj.rotation_euler = rot
-        return {"FINISHED"} 
-        
+        return {"FINISHED"}
+
 class OriginToZPosOperator(bpy.types.Operator):
     bl_idname = "object.origin_z_pos"
     bl_label = ""
@@ -297,11 +297,11 @@ class UVUnwrapAllOperator(bpy.types.Operator):
     bl_idname = "object.uvunwrapall"
     bl_label = "Unwrap All"
     bl_options = {"REGISTER", "UNDO"}
-    
+
     def execute(self, context):
         selected = context.selected_objects
         active_obj = context.scene.objects.active
-        bpy.ops.object.select_all(action='DESELECT')        
+        bpy.ops.object.select_all(action='DESELECT')
         for obj in selected:
             if obj.type == 'MESH':
                 obj.select = True
@@ -312,15 +312,15 @@ class UVUnwrapAllOperator(bpy.types.Operator):
                 bpy.ops.mesh.select_all(action='DESELECT')
                 bpy.ops.object.editmode_toggle()
                 obj.select = False
-            
+
         for obj in selected:
             obj.select = True
         bpy.context.scene.objects.active = active_obj
         return {"FINISHED"}
-        
-        
-## Batch Renaming ##    
-bpy.types.Scene.objectnames = StringProperty(get=get_obj_name, set=set_obj_name)         
+
+
+## Batch Renaming ##
+bpy.types.Scene.objectnames = StringProperty(get=get_obj_name, set=set_obj_name)
 
 
 #-------------------------#
@@ -335,63 +335,63 @@ class MainPanelObject(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         scene = context.scene
-        
+
         # Test Modual
         #col = layout.column(align=True)
         #col.operator("object.origin_to_center", icon="LAYER_ACTIVE")
-        
+
         #col.separator()
         #col.label(text="Bone Offset Amount")
         #col.prop(bpy.context.scene, "xscale", text="X")
         #col.prop(bpy.context.scene, "yscale", text="Y")
         #col.prop(bpy.context.scene, "zscale", text="Z")
-        
-        
+
+
         #Shortcut Keys
         box = layout.box()
         row = box.row(align=True)
         row.operator("object.edgedisplay", icon="MESH_GRID")
-        row.operator("object.align_objects", text="Align")      
+        row.operator("object.align_objects", text="Align")
         row.operator("object.wireframe", icon="LATTICE_DATA")
         col = box.column(align=True)
         col.label(text="Drivers")
         col.operator("object.create_drivers", icon="LINKED")
-        
+
         space = layout.column(align=True)
         space.separator()
-        
+
         # Object Rename
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Object Settings", icon="OBJECT_DATAMODE")
+        col.label(text="Object Settings 2", icon="OBJECT_DATAMODE")
         col.separator()
         col.prop(bpy.context.scene, "objectnames", text="")
         row = box.row(align=True)
         row.operator("object.origin_to_center", icon="LAYER_ACTIVE")
         row.operator("object.origin_z_pos", icon="MOVE_DOWN_VEC")
-        
+
         space = layout.column(align=True)
         space.separator()
-        
+
         # Selection Types
         box = layout.box()
         # Selection Sets
         col = box.column(align=True)
         col.label(text="Selection Types", icon="HAND")
         col.separator()
-        
+
         #row = box.row(align=True)
        # row.prop(bpy.context.scene, "test_enum", text="", icon="COLLAPSEMENU", icon_only=True)
         #row.prop(bpy.context.scene, "setname", text="")
-        #row.operator("object.remove_set", icon="X")  
-       
+        #row.operator("object.remove_set", icon="X")
+
         # Select by Type
         row = box.column(align=True)
         #row.prop(bpy.context.scene, "select_by_type", text="Select")
-        
+
         space = layout.column(align=True)
         space.separator()
-        
+
         # Extra Features
         box = layout.box()
         col = box.column(align=True)
@@ -400,7 +400,7 @@ class MainPanelObject(bpy.types.Panel):
         #col.operator("object.smoothsurface")
         col.operator("object.uvunwrapall", text="Smart UV", icon="IMAGE_RGB")
         col.operator("object.centergroup", text="Center Group", icon="IMAGE_RGB")
-        
+
 
 #------------------------#
 #--- Register Modules ---#
@@ -426,11 +426,11 @@ def register():
     bpy.utils.register_class(AutoKeyFrameOperator)
     bpy.utils.register_class(OverrideDeleteOperator)
     bpy.utils.register_class(UVUnwrapAllOperator)
-    
+
     #Keymaps
     wm = bpy.context.window_manager
     kc = wm.keyconfigs.addon
-    
+
     km = wm.keyconfigs.addon.keymaps.new(name='Object Mode', space_type='EMPTY')
     kmi = km.keymap_items.new(SaveNormalOperator.bl_idname, 'S', 'PRESS', ctrl=True, shift=False)
     kmi = km.keymap_items.new(SaveBackupOperator.bl_idname, 'S', 'PRESS', ctrl=True, shift=True, alt=True)
@@ -440,7 +440,7 @@ def register():
     kmi = km.keymap_items.new(OverrideDeleteOperator.bl_idname, 'X', 'PRESS', ctrl=False, shift=False)
     kmi = km.keymap_items.new(AutoKeyFrameOperator.bl_idname, 'A', 'PRESS', ctrl=True, shift=False, alt=True)
     addon_keymaps.append(km)
-    
+
 def unregister():
 
     addon_keymaps.clear()
