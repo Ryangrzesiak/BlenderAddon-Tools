@@ -323,6 +323,115 @@ class UVUnwrapAllOperator(bpy.types.Operator):
 bpy.types.Scene.objectnames = StringProperty(get=get_obj_name, set=set_obj_name)
 
 
+
+###########################################################
+# Testing #
+
+#-------------------------#
+#--- Selection By Type ---#
+#-------------------------#
+'''
+selection_types = []
+display_type = 0
+
+def append_selection_types():
+    # Append Data Types
+    if len(selection_types) == 0:
+        for name in data_types:
+            selection_types.append((name, name, ''))
+
+def selection_type_items(self, context):
+    # Dynamic Lists
+    global selection_types
+    return selection_types
+
+def get_display_selection_type(self):
+    global display_type
+    return display_type
+
+
+# List Menu
+def set_display_selection_type(self, value):
+    global selection_types
+    global display_type
+    display_type = value
+
+    # Only Select Type
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.scene.objects.active = None
+
+    for obj in bpy.context.scene.objects:
+        if selection_types[value][0] == 'All':
+            obj.hide_select = False
+        elif obj.type != selection_types[value][0].upper():
+            obj.hide_select = True
+        else:
+            obj.hide_select = False
+
+'''
+#-----------------------#
+#--- Selection Types ---#
+#-----------------------#
+selection_types = [('All', 'All', '', 0),
+              ('Mesh', 'Mesh', '', 1),
+              ('Camera', 'Camera', '', 2),
+              ('Empty', 'Empty', '', 2),
+              ('Curve', 'Curve', '', 3)
+              ] #, 'Camera', 'Curve', 'Armature', 'Font'
+display_type = 0
+objects_in_scene = 0
+
+def select_by_display_type(value):
+    global selection_types
+
+    # Deselect Objects
+    selected_obj = bpy.context.selected_objects
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.scene.objects.active = None
+
+
+    # Change Selection Type
+    for obj in bpy.context.scene.objects:
+        if selection_types[value][0] == 'All':
+            obj.hide_select = False
+        elif obj.type != selection_types[value][0].upper():
+            obj.hide_select = True
+        else:
+            obj.hide_select = False
+
+    # Reselect Objects
+    for obj in selected_obj:
+        obj.select = True
+
+
+
+def get_display_type(self):
+    global display_type
+    global selection_types
+    global objects_in_scene
+    objects_current = len(bpy.context.scene.objects)
+
+    # Updates selection type if objects have been added
+    if objects_in_scene < objects_current:
+        print("Type Changed")
+        select_by_display_type(selection_types[display_type][3])
+        objects_in_scene = len(bpy.context.scene.objects)
+
+    return display_type
+
+
+def set_display_type(self, value):
+    global display_type
+    display_type = value
+
+    select_by_display_type(value)
+
+bpy.types.Scene.select_by_type = EnumProperty(items=selection_types,
+                                              get=get_display_type,
+                                              set=set_display_type)
+
+
+
 #-------------------------#
 #--- Main Layout Panel ---#
 #-------------------------#
@@ -368,7 +477,7 @@ class MainPanelObject(bpy.types.Panel):
         col.prop(bpy.context.scene, "objectnames", text="")
         row = box.row(align=True)
         row.operator("object.origin_to_center", icon="LAYER_ACTIVE")
-        row.operator("object.origin_z_pos", icon="MOVE_DOWN_VEC")
+        ###row.operator("object.origin_z_pos", icon="MOVE_DOWN_VEC")
 
         space = layout.column(align=True)
         space.separator()
@@ -387,7 +496,7 @@ class MainPanelObject(bpy.types.Panel):
 
         # Select by Type
         row = box.column(align=True)
-        #row.prop(bpy.context.scene, "select_by_type", text="Select")
+        row.prop(bpy.context.scene, "select_by_type", text="")
 
         space = layout.column(align=True)
         space.separator()
