@@ -91,16 +91,7 @@ bpy.types.Scene.yscale = FloatProperty(default=1.0, get=get_y_offset, set=set_y_
 bpy.types.Scene.zscale = FloatProperty(default=1.0, get=get_z_offset, set=set_z_offset)
 #######################################################################
 
-## Keyboard Functions ##
-class OverrideDeleteOperator(bpy.types.Operator):
-    bl_idname = "object.overridedelete"
-    bl_label = "Delete"
-    bl_options = {"REGISTER", "UNDO"}
 
-    def execute(self, context):
-        bpy.ops.object.delete(use_global=True)
-        self.report({'INFO'}, 'Deleted Object')
-        return {"FINISHED"}
 
 class AutoKeyFrameOperator(bpy.types.Operator):
     bl_idname = "object.autokeyframe"
@@ -285,88 +276,6 @@ bpy.types.Scene.objectnames = StringProperty(get=get_obj_name, set=set_obj_name)
 
 
 ###########################################################
-# Testing #
-
-#-------------------------#
-#--- View in Wireframe ---#
-#-------------------------#
-
-class EdgeDisplayOperator(bpy.types.Operator):
-    bl_idname = "object.edgedisplay"
-    bl_label = ""
-    bl_options = {"REGISTER", "UNDO"}
-
-
-    def execute(self, context):
-
-        return {"FINISHED"}
-
-
-edge_display_bool = False
-objects_in_scene = 0
-
-def get_edge_display(self):
-    global edge_display_bool
-    global objects_in_scene
-    objects_current = len(bpy.context.scene.objects)
-
-    # Update Objects in scene
-    if objects_in_scene < objects_current:
-
-        for obj in bpy.data.objects:
-            if edge_display_bool == True:
-                obj.show_wire = True
-                obj.show_all_edges = True
-
-        objects_in_scene = len(bpy.context.scene.objects)
-
-    elif objects_current != objects_in_scene:
-        objects_in_scene = objects_current
-
-
-    return edge_display_bool
-
-# Change Edge Wireframe on Meshes
-def set_edge_display(self, value):
-    global edge_display_bool
-    edge_display_bool = value
-
-    for obj in bpy.data.objects:
-        if value == True:
-            obj.show_wire = True
-            obj.show_all_edges = True
-        else:
-            obj.show_wire = False
-            obj.show_all_edges = False
-
-
-
-bpy.types.Scene.edge_display_viewport = BoolProperty(name='',
-                                              get=get_edge_display,
-                                              set=set_edge_display)
-
-
-class WireFrameOperator(bpy.types.Operator):
-    """Batch Export selected objects to FBX files.."""
-    bl_idname = "object.wireframe"
-    bl_label = ""
-    bl_options = {"REGISTER", "UNDO"}
-    def execute(self, context):
-        try:
-            selected = context.selected_objects
-            active_obj = context.scene.objects.active
-
-            type = active_obj.draw_type
-            if type == "TEXTURED":
-                type = "WIRE"
-            elif type == "WIRE":
-                type = "TEXTURED"
-
-            for mesh_obj in selected:
-                mesh_obj.draw_type = type
-        except:
-            pass
-        return {"FINISHED"}
 
 
 '''
@@ -515,21 +424,6 @@ class AlignObjectsOperator(bpy.types.Operator):
     bl_idname = "object.align_objects"
     bl_label = "Align Objects"
     bl_options = {"REGISTER", "UNDO"}
-    '''
-    def execute(self, context):
-        active_object = bpy.context.scene.objects.active
-        pos = active_object.location
-        rot = active_object.rotation_euler
-        selected_objects = context.selected_objects
-
-        if len(selected_objects) == 1:
-            selected_objects[0].location = bpy.context.scene.cursor_location
-        else:
-            for obj in selected_objects:
-                obj.location = pos
-                obj.rotation_euler = rot
-        return {"FINISHED"}
-    '''
 
     objects_location = {}
     objects_rotation = {}
@@ -672,6 +566,154 @@ class AlignObjectsOperator(bpy.types.Operator):
             return {'CANCELLED'}
 
 
+#-------------------------#
+#--- UV Unwrap Objects ---#
+#-------------------------#
+bpy.types.Scene.uv_unwrap_angle = FloatProperty(default=60.0, min=0.0, max=90.0, step=3)
+
+class UVUnwrapAllOperator(bpy.types.Operator):
+    bl_idname = "object.uv_unwrap_all"
+    bl_label = "Unwrap All"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        angle = bpy.context.scene.uv_unwrap_angle
+        selected = context.selected_objects
+        active_obj = context.scene.objects.active
+        bpy.ops.object.select_all(action='DESELECT')
+
+        # Unwrap All Objects
+        for obj in selected:
+            if obj.type == 'MESH':
+                obj.select = True
+                bpy.context.scene.objects.active = obj
+                bpy.ops.object.editmode_toggle()
+                bpy.ops.mesh.select_all(action='SELECT')
+                bpy.ops.uv.smart_project(angle_limit=angle, island_margin=0.01)
+                #bpy.ops.mesh.select_all(action='DESELECT')
+                bpy.ops.object.editmode_toggle()
+                obj.select = False
+
+        for obj in selected:
+            obj.select = True
+        bpy.context.scene.objects.active = active_obj
+        return {"FINISHED"}
+
+class ExportUVLayoutOperator(bpy.types.Operator):
+    bl_idname = "object.export_uv_layout"
+    bl_label = "Export UV"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        basedir = os.path.dirname(bpy.data.filepath)
+        name = bpy.path.clean_name(bpy.context.scene.objects.active.name)
+        uv_filepath = os.path.join(basedir, name + "_uv.png")
+        print(uv_filepath)
+        bpy.ops.uv.export_layout(filepath=uv_filepath, check_existing=False, \
+                                 export_all=True, modified=False, \
+                                 mode='PNG', size=(2048, 2048), opacity=0.0)
+        return {"FINISHED"}
+
+#-------------------------#
+#--- Save Blender File ---#
+#-------------------------#
+bpy.types.Scene.blendersavelocation = StringProperty(subtype='FILE_PATH')
+
+class SaveBackupOperator(bpy.types.Operator):
+    bl_idname = "object.savebackup"
+    bl_label = ""
+    bl_options = {"REGISTER"}
+    def execute(self, context):
+        # Location Names
+        file_location = bpy.context.blend_data.filepath
+        file_name = bpy.path.display_name_from_filepath(file_location)
+        num = 1
+
+        if bpy.data.is_saved:
+            # File Preperation
+            full_name = file_name + ".blend"
+
+            if file_location.endswith(full_name):
+                file_location = file_location[:-len(full_name)]
+            if not os.path.exists(file_location + "Backup"):
+                os.makedirs(file_location + "Backup")
+
+            file_location = file_location + "Backup\\"
+
+            # Check through saved copies
+            while True:
+                temp_file = file_location + file_name + "_" + str(num).zfill(2) + ".blend"
+
+                if not os.path.isfile(temp_file):
+                    bpy.ops.wm.save_as_mainfile(filepath=temp_file, copy=True)
+                    break
+                num += 1
+            self.report({'INFO'}, 'Saved Incremental Backup: ' + file_name + "_" + str(num).zfill(2) + ".blend")
+
+        else:
+            self.report({'INFO'}, 'Please Save Blend File ')
+        return {"FINISHED"}
+
+
+class SaveNormalOperator(bpy.types.Operator):
+    bl_idname = "object.save_normal"
+    bl_label = "Save Blender File"
+    bl_options = {"REGISTER"}
+
+    files = bpy.props.CollectionProperty(
+        name="File Path",
+        type=bpy.types.OperatorFileListElement,
+        )
+    directory = StringProperty(
+        subtype='DIR_PATH',
+        )
+
+    # Save Blender through file browser
+    def execute(self, context):
+        if bpy.data.is_saved == False:
+            user_file_path = os.path.join(self.directory, self.files[0].name) + ".blend"
+            bpy.ops.wm.save_as_mainfile(filepath=user_file_path)
+            self.report({'INFO'}, 'Saved Blend File: ' + user_file_path)
+
+        return {"FINISHED"}
+
+    def invoke(self, context, event):
+        if bpy.data.is_saved == False:
+            wm = context.window_manager
+            wm.fileselect_add(self)
+            return {'RUNNING_MODAL'}
+        else:
+            # Quick save Blender
+            bpy.ops.wm.save_as_mainfile()
+            self.report({'INFO'}, 'Saved Blend File')
+            return {'FINISHED'}
+
+#---------------------#
+#--- Shortcut Keys ---#
+#---------------------#
+
+#--- Delete Objects ---#
+class OverrideDeleteOperator(bpy.types.Operator):
+    bl_idname = "object.overridedelete"
+    bl_label = "Delete"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        bpy.ops.object.delete(use_global=True)
+        self.report({'INFO'}, 'Deleted Object')
+        return {"FINISHED"}
+
+#--- Turn on Auto Keyframe ---#
+class AutoKeyFrameOperator(bpy.types.Operator):
+    bl_idname = "object.autokeyframe"
+    bl_label = ""
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        button_state = bpy.context.scene.tool_settings.use_keyframe_insert_auto
+        bpy.context.scene.tool_settings.use_keyframe_insert_auto = not button_state
+        bpy.context.screen.scene = bpy.context.screen.scene
+        return {"FINISHED"}
 
 #-------------------------#
 #--- Main Layout Panel ---#
@@ -698,6 +740,17 @@ class MainPanelObject(bpy.types.Panel):
         row.prop(bpy.context.scene, "edge_display_viewport", text="", icon="MESH_GRID", toggle=True)
         row.operator("object.align_objects", text="Align")
         row.operator("object.wireframe", text="", icon="LATTICE_DATA")
+
+        box = layout.box()
+        col = box.column(align=True)
+
+        col.label(text="UV Tasks")
+        row = box.row(align=True)
+        row.prop(bpy.context.scene, "uv_unwrap_angle", text="")
+        row.operator("object.uv_unwrap_all", text="Unwrap")
+
+
+
 
 
 
@@ -755,6 +808,8 @@ class MainPanelObject(bpy.types.Panel):
         #col.operator("object.uvunwrapall", text="Smart UV", icon="IMAGE_RGB")
         #col.operator("object.centergroup", text="Center Group", icon="IMAGE_RGB")
 
+#col = box.column(align=True)
+#col.operator("object.export_uv_layout", text="Export UV's", icon="IMAGE_DATA")
 
 #------------------------#
 #--- Register Modules ---#
@@ -769,9 +824,15 @@ def register():
     bpy.utils.register_class(WireFrameOperator)
     bpy.utils.register_class(EdgeDisplayOperator)
     bpy.utils.register_class(AlignObjectsOperator)
+    bpy.utils.register_class(UVUnwrapAllOperator)
+    bpy.utils.register_class(ExportUVLayoutOperator)
+    bpy.utils.register_class(SaveNormalOperator)
+    bpy.utils.register_class(SaveBackupOperator)
+    bpy.utils.register_class(OverrideDeleteOperator)
+    bpy.utils.register_class(AutoKeyFrameOperator)
     '''
     bpy.utils.register_class(OriginToSelectionOperator)
-    bpy.utils.register_class(ExportUVLayoutOperator)
+
     bpy.utils.register_class(OriginToZPosOperator)
 
     bpy.utils.register_class(OriginToCenterOperator)
@@ -779,11 +840,10 @@ def register():
 
     #bpy.utils.register_class(CenterGroupOperator)
     bpy.utils.register_class(CreateDriversOperator)
-    bpy.utils.register_class(SaveNormalOperator)
-    bpy.utils.register_class(SaveBackupOperator)
-    bpy.utils.register_class(AutoKeyFrameOperator)
-    bpy.utils.register_class(OverrideDeleteOperator)
-    #bpy.utils.register_class(UVUnwrapAllOperator)
+
+
+
+    #
     '''
     #Keymaps
     wm = bpy.context.window_manager
@@ -794,10 +854,10 @@ def register():
     kmi = km.keymap_items.new(WireFrameOperator.bl_idname, 'F3', 'PRESS', ctrl=False, shift=False)
     kmi = km.keymap_items.new(EdgeDisplayOperator.bl_idname, 'F4', 'PRESS', ctrl=False, shift=False)
     kmi = km.keymap_items.new(AlignObjectsOperator.bl_idname, 'Q', 'PRESS', ctrl=False, shift=True)
-    #kmi = km.keymap_items.new(SaveNormalOperator.bl_idname, 'S', 'PRESS', ctrl=True, shift=False)
-    #kmi = km.keymap_items.new(SaveBackupOperator.bl_idname, 'S', 'PRESS', ctrl=True, shift=True, alt=True)
-    #kmi = km.keymap_items.new(OverrideDeleteOperator.bl_idname, 'X', 'PRESS', ctrl=False, shift=False)
-    #kmi = km.keymap_items.new(AutoKeyFrameOperator.bl_idname, 'A', 'PRESS', ctrl=True, shift=False, alt=True)
+    kmi = km.keymap_items.new(SaveNormalOperator.bl_idname, 'S', 'PRESS', ctrl=True, shift=False)
+    kmi = km.keymap_items.new(SaveBackupOperator.bl_idname, 'S', 'PRESS', ctrl=True, shift=True, alt=True)
+    kmi = km.keymap_items.new(OverrideDeleteOperator.bl_idname, 'X', 'PRESS', ctrl=False, shift=False)
+    kmi = km.keymap_items.new(AutoKeyFrameOperator.bl_idname, 'A', 'PRESS', ctrl=True, shift=False, alt=True)
     addon_keymaps.append(km)
 
 def unregister():
@@ -807,10 +867,15 @@ def unregister():
     bpy.utils.unregister_class(WireFrameOperator)
     bpy.utils.unregister_class(EdgeDisplayOperator)
     bpy.utils.unregister_class(AlignObjectsOperator)
-
+    bpy.utils.unregister_class(UVUnwrapAllOperator)
+    bpy.utils.unregister_class(ExportUVLayoutOperator)
+    bpy.utils.unregister_class(SaveNormalOperator)
+    bpy.utils.unregister_class(SaveBackupOperator)
+    bpy.utils.register_class(OverrideDeleteOperator)
+    bpy.utils.unregister_class(AutoKeyFrameOperator)
     '''
     bpy.utils.unregister_class(OriginToSelectionOperator)
-    bpy.utils.unregister_class(ExportUVLayoutOperator)
+
     bpy.utils.unregister_class(OriginToZPosOperator)
 
     bpy.utils.unregister_class(OriginToCenterOperator)
@@ -818,10 +883,8 @@ def unregister():
 
     bpy.utils.unregister_class(CenterGroupOperator)
     bpy.utils.unregister_class(CreateDriversOperator)
-    bpy.utils.unregister_class(SaveNormalOperator)
-    bpy.utils.unregister_class(SaveBackupOperator)
-    bpy.utils.unregister_class(AutoKeyFrameOperator)
-    bpy.utils.unregister_class(OverrideDeleteOperator)
-    bpy.utils.unregister_class(UVUnwrapAllOperator)
+
+
+
     bpy.utils.unregister_module(__name__)
     '''
