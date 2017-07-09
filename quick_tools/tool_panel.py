@@ -475,11 +475,24 @@ class EdgeDisplayOperator(bpy.types.Operator):
 bpy.types.Scene.edge_display_bool = BoolProperty()
 bpy.types.Scene.edge_display_objects = IntProperty()
 
-def display_edges():
-    edge_display = bpy.context.scene.edge_display_bool
+def get_edge_display(self):
+    if self.edge_display_objects != len(bpy.context.scene.objects):
+        edge_display = bpy.context.scene.edge_display_bool
+
+        # Choose which edge display
+        if edge_display == True:
+            for obj in bpy.data.objects:
+                obj.show_wire = True
+                obj.show_all_edges = True
+
+        self.edge_display_objects = len(bpy.context.scene.objects)
+    return self.edge_display_bool
+
+def set_edge_display(self, value):
+    self.edge_display_bool = value
 
     # Choose which edge display
-    if edge_display == True:
+    if value == True:
         for obj in bpy.data.objects:
             obj.show_wire = True
             obj.show_all_edges = True
@@ -487,16 +500,6 @@ def display_edges():
         for obj in bpy.data.objects:
             obj.show_wire = False
             obj.show_all_edges = False
-
-
-def get_edge_display(self):
-    if self.edge_display_objects != len(bpy.context.scene.objects):
-        display_edges()
-    return self.edge_display_bool
-
-def set_edge_display(self, value):
-    self.edge_display_bool = value
-    display_edges()
 
 bpy.types.Scene.edge_display_viewport = BoolProperty(
     name='',
@@ -530,11 +533,55 @@ class AlignObjectsOperator(bpy.types.Operator):
 
     objects_location = {}
     objects_rotation = {}
+    objects_scale = {}
+
+    align_location = True
+    align_rotation = True
+    align_scale = False
+
+    active_object = ""
+    duplicate_objects = []
 
     def modal(self, context, event):
+        context.area.header_text_set("Confirm: Enter/LClick, Cancel: (Esc/RClick), To align using the active object, use Location (G): (ON), Rotation (R): (OFF), Scale (S): (OFF)")
+
+
+
+        if event.type == 'G' and event.value == 'PRESS':
+            self.align_location = not self.align_location
+
+            if self.align_location == False:
+                for key, value in self.objects_location.items():
+                    bpy.data.objects[key].location = value
+            else:
+                for key, value in self.objects_location.items():
+                    bpy.data.objects[key].location = self.active_object.location
+
+        elif event.type == 'R' and event.value == 'PRESS':
+            self.align_rotation = not self.align_rotation
+
+            if self.align_rotation == False:
+                for key, value in self.objects_rotation.items():
+                    bpy.data.objects[key].rotation_euler = value
+            else:
+                for key, value in self.objects_rotation.items():
+                    bpy.data.objects[key].rotation_euler = self.active_object.rotation_euler
+
+        elif event.type == 'S' and event.value == 'PRESS':
+            self.align_scale = not self.align_scale
+
+            if self.align_scale == False:
+                for key, value in self.objects_scale.items():
+                    bpy.data.objects[key].scale = value
+            else:
+                for key, value in self.objects_scale.items():
+                    bpy.data.objects[key].scale = self.active_object.scale
+
+
+        #-------------------------------------------------------
 
         # X: Object snaps to the x position of the active object
-        if event.type == 'X':
+        elif event.type == 'X':
             active_object = bpy.context.scene.objects.active
 
             for key, value in self.objects_location.items():
@@ -561,14 +608,22 @@ class AlignObjectsOperator(bpy.types.Operator):
 
         # FINISHED: Confirm Operation
         elif event.type == 'LEFTMOUSE':
+            for obj in self.duplicate_objects:
+                bpy.data.objects.remove(bpy.data.objects[obj], True)
+            context.area.header_text_set()
+            bpy.context.screen.scene = bpy.context.screen.scene
             return {'FINISHED'}
 
         # CANCELLED: Return Objects to original position
         elif event.type in {'RIGHTMOUSE', 'ESC'}:
+            for obj in self.duplicate_objects:
+                bpy.data.objects.remove(bpy.data.objects[obj], True)
             for key, value in self.objects_location.items():
                 bpy.data.objects[key].location = value
             for key, value in self.objects_rotation.items():
                 bpy.data.objects[key].rotation_euler = value
+            context.area.header_text_set()
+            bpy.context.screen.scene = bpy.context.screen.scene
             return {'CANCELLED'}
 
         return {'RUNNING_MODAL'}
@@ -577,19 +632,30 @@ class AlignObjectsOperator(bpy.types.Operator):
         print("invoke")
         if context.object:
             selected_objects = context.selected_objects
-            active_object = bpy.context.scene.objects.active
-            pos = active_object.location
-            rot = active_object.rotation_euler
+            self.active_object = bpy.context.scene.objects.active
+            pos = self.active_object.location
+            rot = self.active_object.rotation_euler
 
-            # Saves objects to List
+            # Saves object's transform to List
             self.objects_location = {}
             self.objects_rotation = {}
+            self.objects_scale = {}
+            self.duplicate_objects = []
             for obj in selected_objects:
                 self.objects_location[obj.name] = list(obj.location)
                 self.objects_rotation[obj.name] = list(obj.rotation_euler)
+                self.objects_scale[obj.name] = list(obj.scale)
 
+            # Duplicating Objects
+            for obj in selected_objects:
+                new_obj = obj.copy()
+                bpy.context.scene.objects.link(new_obj)
+                if obj != self.active_object:
+                    new_obj.draw_type = "WIRE"
+                    new_obj.show_x_ray = True
+                self.duplicate_objects.append(new_obj.name)
 
-
+            print(self.duplicate_objects)
             # Align Position and Rotation
             if len(selected_objects) == 1:
                 selected_objects[0].location = bpy.context.scene.cursor_location
