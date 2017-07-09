@@ -6,13 +6,6 @@ from bpy.props import *
 from ryan_tools.quick_tools.tool_functions import *
 '''
 ### Test Function
-class OriginToCenterOperator(bpy.types.Operator):
-    bl_idname = "object.origin_to_center"
-    bl_label = "Origin"
-    bl_options = {"REGISTER", "UNDO"}
-    def execute(self, context):
-        bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
-        return {"FINISHED"}
 
 # Broken File Fix
 class RotateAround1Operator(bpy.types.Operator):
@@ -92,65 +85,6 @@ bpy.types.Scene.zscale = FloatProperty(default=1.0, get=get_z_offset, set=set_z_
 #######################################################################
 
 
-
-class AutoKeyFrameOperator(bpy.types.Operator):
-    bl_idname = "object.autokeyframe"
-    bl_label = ""
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        button_state = bpy.context.scene.tool_settings.use_keyframe_insert_auto
-        bpy.context.scene.tool_settings.use_keyframe_insert_auto = not button_state
-        bpy.context.screen.scene = bpy.context.screen.scene
-        return {"FINISHED"}
-
-## Normal Functions ##
-bpy.types.Scene.blendersavelocation = StringProperty(subtype='FILE_PATH')
-class SaveBackupOperator(bpy.types.Operator):
-    bl_idname = "object.savebackup"
-    bl_label = ""
-    bl_options = {"REGISTER", "UNDO"}
-    def execute(self, context):
-        # Location Names
-        file_location = bpy.context.blend_data.filepath
-        file_name = bpy.path.display_name_from_filepath(file_location)
-        num = 1
-
-        if file_location != "":
-            # File Preperation
-            full_name = file_name + ".blend"
-            if file_location.endswith(full_name):
-                file_location = file_location[:-len(full_name)]
-            if not os.path.exists(file_location + "\\Backup"):
-                os.makedirs("Backup\\")
-
-            file_location = file_location + "Backup\\"
-            print(file_location)
-            # Check through saved copies
-            while True:
-                temp_file = file_location + file_name + "_" + str(num).zfill(2) + ".blend"
-
-                if not os.path.isfile(temp_file):
-                    bpy.ops.wm.save_as_mainfile(filepath=temp_file, copy=True)
-                    break
-                num += 1
-            self.report({'INFO'}, 'Saved Incremental Backup: ' + file_name + "_" + str(num).zfill(2) + ".blend")
-        else:
-            self.report({'INFO'}, 'Please Save Blend File ')
-        return {"FINISHED"}
-
-class SaveNormalOperator(bpy.types.Operator):
-    bl_idname = "object.savenormal"
-    bl_label = ""
-    bl_options = {"REGISTER", "UNDO"}
-    def execute(self, context):
-        if bpy.data.is_saved == False:
-            pass
-        else:
-            bpy.ops.wm.save_as_mainfile()
-            self.report({'INFO'}, 'Saved Blend File')
-        return {"FINISHED"}
-
 class CreateDriversOperator(bpy.types.Operator):
     bl_idname = "object.create_drivers"
     bl_label = ""
@@ -181,93 +115,6 @@ class CenterGroupOperator(bpy.types.Operator):
         return {"FINISHED"}
 
 #bpy.context.user_preferences.view.use_rotate_around_active = True
-
-
-class OriginToCenterOperator(bpy.types.Operator):
-    bl_idname = "object.origin_to_center"
-    bl_label = "Origin"
-    bl_options = {"REGISTER", "UNDO"}
-    def execute(self, context):
-        bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
-        return {"FINISHED"}
-
-class AlignObjectsOperator(bpy.types.Operator):
-    bl_idname = "object.align_objects"
-    bl_label = ""
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        active_object = bpy.context.scene.objects.active
-        pos = active_object.location
-        rot = active_object.rotation_euler
-        selected_objects = context.selected_objects
-
-        if len(selected_objects) == 1:
-            selected_objects[0].location = bpy.context.scene.cursor_location
-        else:
-            for obj in selected_objects:
-                obj.location = pos
-                obj.rotation_euler = rot
-        return {"FINISHED"}
-
-class OriginToZPosOperator(bpy.types.Operator):
-    bl_idname = "object.origin_z_pos"
-    bl_label = ""
-    bl_options = {"REGISTER", "UNDO"}
-    def execute(self, context):
-        position_origin_to_z_pos()
-        return {"FINISHED"}
-
-class ExportUVLayoutOperator(bpy.types.Operator):
-    bl_idname = "object.exportuvlayout"
-    bl_label = "Export UV"
-    bl_options = {"UNDO"}
-    def invoke(self, context, event):
-        basedir = os.path.dirname(bpy.data.filepath)
-        name = bpy.path.clean_name(bpy.context.scene.objects.active.name)
-        uv_filepath = os.path.join(basedir, name + "_uv.png")
-        print(uv_filepath)
-        bpy.ops.uv.export_layout(filepath=uv_filepath, check_existing=False, \
-                                 export_all=True, modified=False, \
-                                 mode='PNG', size=(2048, 2048), opacity=0.0)
-        return {"FINISHED"}
-
-class OriginToSelectionOperator(bpy.types.Operator):
-    bl_idname = "object.originselection"
-    bl_label = "Origin"
-    bl_options = {"REGISTER", "UNDO"}
-    def invoke(self, context, event):
-        bpy.ops.view3d.snap_cursor_to_selected()
-        bpy.ops.object.editmode_toggle()
-        bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
-        bpy.ops.view3d.snap_cursor_to_center()
-        bpy.ops.object.editmode_toggle()
-        return {"FINISHED"}
-
-class UVUnwrapAllOperator(bpy.types.Operator):
-    bl_idname = "object.uvunwrapall"
-    bl_label = "Unwrap All"
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        selected = context.selected_objects
-        active_obj = context.scene.objects.active
-        bpy.ops.object.select_all(action='DESELECT')
-        for obj in selected:
-            if obj.type == 'MESH':
-                obj.select = True
-                bpy.context.scene.objects.active = obj
-                bpy.ops.object.editmode_toggle()
-                bpy.ops.mesh.select_all(action='SELECT')
-                bpy.ops.uv.smart_project(angle_limit=60.0, island_margin=0.01)
-                bpy.ops.mesh.select_all(action='DESELECT')
-                bpy.ops.object.editmode_toggle()
-                obj.select = False
-
-        for obj in selected:
-            obj.select = True
-        bpy.context.scene.objects.active = active_obj
-        return {"FINISHED"}
 
 
 ## Batch Renaming ##
@@ -716,6 +563,108 @@ class AutoKeyFrameOperator(bpy.types.Operator):
         return {"FINISHED"}
 
 #-------------------------#
+#--- Origin Manipulate ---#
+#-------------------------#
+class OriginToZPosOperator(bpy.types.Operator):
+    bl_idname = "object.origin_z_pos"
+    bl_label = ""
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        selected = bpy.context.selected_objects
+        bpy.ops.object.select_all(action='DESELECT')
+
+        for mesh_obj in selected:
+            mesh_obj.select = True
+            minz = 999999.0
+            for vertex in mesh_obj.data.vertices:
+                # object vertices are in object space, translate to world space
+                v_world = mesh_obj.matrix_world * mathutils.Vector((vertex.co[0],vertex.co[1],vertex.co[2]))
+                if v_world[2] < minz:
+                    minz = v_world[2]
+
+            obj_pos = mathutils.Vector(mesh_obj.location)
+            obj_pos.z = obj_pos.z - (obj_pos.z - minz)
+            bpy.context.scene.cursor_location = obj_pos
+            bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+            mesh_obj.select = False
+
+        # Reset Operations
+        bpy.ops.view3d.snap_cursor_to_center()
+        for obj in selected:
+            obj.select = True
+        return {"FINISHED"}
+
+class OriginToCenterOperator(bpy.types.Operator):
+    bl_idname = "object.origin_to_center"
+    bl_label = "Origin"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
+        return {"FINISHED"}
+
+class OriginToSelectionOperator(bpy.types.Operator):
+    bl_idname = "object.origin_selection"
+    bl_label = ""
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        return {"FINISHED"}
+        bpy.ops.view3d.snap_cursor_to_selected()
+        bpy.ops.object.editmode_toggle()
+        bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+        bpy.ops.view3d.snap_cursor_to_center()
+        bpy.ops.object.editmode_toggle()
+        return {"FINISHED"}
+
+#--- Origin Manipulation
+class MoveOriginOperator(bpy.types.Operator):
+    bl_idname = "object.move_origin"
+    bl_label = "Align Objects"
+    bl_options = {"REGISTER", "UNDO"}
+
+
+    def modal(self, context, event):
+        context.area.header_text_set("Confirm: Enter/LClick, Cancel: (Esc/RClick), To align using the active object, use Location (G): (ON), Rotation (R): (OFF), Scale (S): (OFF)")
+
+        # FINISHED: Confirm Operation
+        if event.type == 'G':
+            pass
+
+        elif event.type == 'LEFTMOUSE':
+            context.area.header_text_set()
+            bpy.context.screen.scene = bpy.context.screen.scene
+            return {'FINISHED'}
+
+        # CANCELLED: Return Objects to original position
+        elif event.type in {'RIGHTMOUSE', 'ESC'}:
+            context.area.header_text_set()
+            bpy.context.screen.scene = bpy.context.screen.scene
+            return {'CANCELLED'}
+
+        return {'RUNNING_MODAL'}
+
+    def invoke(self, context, event):
+        print("invoke")
+        if context.object:
+            active_obj = context.scene.objects.active
+            print(active_obj)
+            empty = bpy.data.objects.new("E_OriginMove", None)
+            bpy.context.scene.objects.link(empty)
+            empty.location = active_obj.location
+            empty.empty_draw_size = 3
+            empty.empty_draw_type = "ARROWS"
+            empty.show_x_ray = True
+
+
+            context.window_manager.modal_handler_add(self)
+            return {'RUNNING_MODAL'}
+        else:
+            self.report({'WARNING'}, "No active object, could not finish")
+            return {'CANCELLED'}
+
+#-------------------------#
 #--- Main Layout Panel ---#
 #-------------------------#
 class MainPanelObject(bpy.types.Panel):
@@ -744,14 +693,22 @@ class MainPanelObject(bpy.types.Panel):
         box = layout.box()
         col = box.column(align=True)
 
+        # Uv Operations
         col.label(text="UV Tasks")
         row = box.row(align=True)
         row.prop(bpy.context.scene, "uv_unwrap_angle", text="")
         row.operator("object.uv_unwrap_all", text="Unwrap")
 
-
-
-
+        # Origin Manipulation
+        box = layout.box()
+        col = box.column(align=True)
+        col.label(text="Origin Tools")
+        row = box.row(align=True)
+        row.operator("object.origin_to_center", icon="LAYER_ACTIVE")
+        row.operator("object.origin_selection", text="", icon="TRIA_RIGHT_BAR")
+        row.operator("object.origin_z_pos", icon="TRIA_DOWN")
+        col = box.column(align=True)
+        col.operator("object.move_origin", icon="LAYER_ACTIVE")
 
 
 
@@ -830,21 +787,12 @@ def register():
     bpy.utils.register_class(SaveBackupOperator)
     bpy.utils.register_class(OverrideDeleteOperator)
     bpy.utils.register_class(AutoKeyFrameOperator)
-    '''
-    bpy.utils.register_class(OriginToSelectionOperator)
-
     bpy.utils.register_class(OriginToZPosOperator)
-
     bpy.utils.register_class(OriginToCenterOperator)
+    bpy.utils.register_class(OriginToSelectionOperator)
+    bpy.utils.register_class(MoveOriginOperator)
 
 
-    #bpy.utils.register_class(CenterGroupOperator)
-    bpy.utils.register_class(CreateDriversOperator)
-
-
-
-    #
-    '''
     #Keymaps
     wm = bpy.context.window_manager
     kc = wm.keyconfigs.addon
@@ -873,18 +821,7 @@ def unregister():
     bpy.utils.unregister_class(SaveBackupOperator)
     bpy.utils.register_class(OverrideDeleteOperator)
     bpy.utils.unregister_class(AutoKeyFrameOperator)
-    '''
-    bpy.utils.unregister_class(OriginToSelectionOperator)
-
     bpy.utils.unregister_class(OriginToZPosOperator)
-
     bpy.utils.unregister_class(OriginToCenterOperator)
-
-
-    bpy.utils.unregister_class(CenterGroupOperator)
-    bpy.utils.unregister_class(CreateDriversOperator)
-
-
-
-    bpy.utils.unregister_module(__name__)
-    '''
+    bpy.utils.unregister_class(OriginToSelectionOperator)
+    bpy.utils.unregister_class(MoveOriginOperator)
