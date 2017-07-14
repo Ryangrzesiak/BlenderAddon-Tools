@@ -118,7 +118,7 @@ class CenterGroupOperator(bpy.types.Operator):
 
 
 ## Batch Renaming ##
-bpy.types.Scene.objectnames = StringProperty(get=get_obj_name, set=set_obj_name)
+
 
 
 
@@ -597,7 +597,7 @@ class OriginToZPosOperator(bpy.types.Operator):
 
 class OriginToCenterOperator(bpy.types.Operator):
     bl_idname = "object.origin_to_center"
-    bl_label = "Origin"
+    bl_label = "Center"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -610,59 +610,150 @@ class OriginToSelectionOperator(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        return {"FINISHED"}
-        bpy.ops.view3d.snap_cursor_to_selected()
-        bpy.ops.object.editmode_toggle()
+        selected_obj = bpy.context.selected_objects
+        active_obj = context.scene.objects.active
+        cursor_loc = list(bpy.context.scene.cursor_location)
+        print(cursor_loc)
+
+        bpy.context.scene.cursor_location = active_obj.location
         bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
-        bpy.ops.view3d.snap_cursor_to_center()
-        bpy.ops.object.editmode_toggle()
+
+        bpy.context.scene.cursor_location = cursor_loc
         return {"FINISHED"}
+
+
 
 #--- Origin Manipulation
 class MoveOriginOperator(bpy.types.Operator):
     bl_idname = "object.move_origin"
-    bl_label = "Align Objects"
+    bl_label = "Widget Tool"
     bl_options = {"REGISTER", "UNDO"}
 
+    empty_obj = ""
+    active_obj = ""
+    origin_location = []
 
     def modal(self, context, event):
-        context.area.header_text_set("Confirm: Enter/LClick, Cancel: (Esc/RClick), To align using the active object, use Location (G): (ON), Rotation (R): (OFF), Scale (S): (OFF)")
+        if event.type in {'G'}:
+            pass
+        else:
+            context.area.header_text_set("Confirm: Enter/LClick, Cancel: (Esc/RClick), To align using the active object, use Location (G): (ON), Rotation (R): (OFF), Scale (S): (OFF)")
+
+        #bpy.ops.view3d.snap_cursor_to_selected()
+        scene = context.scene
+        obj = context.object
+        wm = context.window_manager
+        #_timer = None
+
+        if event.type == 'TIMER':
+            #print(self._timer)
+
+            bpy.context.scene.cursor_location = self.empty_obj.location
+            bpy.ops.object.select_all(action='DESELECT')
+            self.active_obj.select = True
+            bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+            self.active_obj.select = False
+            self.empty_obj.select = True
+            context.scene.objects.active = self.empty_obj
 
         # FINISHED: Confirm Operation
-        if event.type == 'G':
-            pass
-
-        elif event.type == 'LEFTMOUSE':
-            context.area.header_text_set()
-            bpy.context.screen.scene = bpy.context.screen.scene
-            return {'FINISHED'}
+        #if event.type == 'G':
+            #bpy.ops.view3d.snap_cursor_to_selected()
+            #context.scene.objects.active = active_obj
+            #bpy.ops.transform.translate('INVOKE_DEFAULT')
 
         # CANCELLED: Return Objects to original position
-        elif event.type in {'RIGHTMOUSE', 'ESC'}:
+        elif event.type in {'ESC', 'ENTER'}:
+            #self.active_obj.location = origin_location
+            self.active_obj.select = True
+            context.scene.objects.active = self.active_obj
+            bpy.data.objects.remove(self.empty_obj, True)
             context.area.header_text_set()
             bpy.context.screen.scene = bpy.context.screen.scene
+            wm = context.window_manager
+            wm.event_timer_remove(self._timer)
             return {'CANCELLED'}
 
-        return {'RUNNING_MODAL'}
+        return {'PASS_THROUGH'}
 
     def invoke(self, context, event):
-        print("invoke")
         if context.object:
-            active_obj = context.scene.objects.active
-            print(active_obj)
+            self.active_obj = context.scene.objects.active
             empty = bpy.data.objects.new("E_OriginMove", None)
             bpy.context.scene.objects.link(empty)
-            empty.location = active_obj.location
+            empty.location = self.active_obj.location
             empty.empty_draw_size = 3
             empty.empty_draw_type = "ARROWS"
             empty.show_x_ray = True
+            self.empty_obj = empty
+
+            bpy.ops.object.select_all(action='DESELECT')
+            empty.select = True
+            context.scene.objects.active = self.active_obj
 
 
-            context.window_manager.modal_handler_add(self)
+            wm = context.window_manager
+            self._timer = wm.event_timer_add(0.01, context.window)
+            wm.modal_handler_add(self)
+            #context.window_manager.modal_handler_add(self)
             return {'RUNNING_MODAL'}
         else:
             self.report({'WARNING'}, "No active object, could not finish")
             return {'CANCELLED'}
+
+"""--------------------#
+#--- Batch Renaming ---#
+---------------------"""
+def set_obj_name(self, value):
+
+    # Rename Tools
+
+    # Add String to End
+    if value.startswith('+'):
+        for obj in bpy.context.selected_objects:
+            obj.name = obj.name + value[1:]
+
+    # Subtract String from End
+    elif value.startswith('-'):
+        for obj in bpy.context.selected_objects:
+            if value[1:].isdigit():
+                subtract = int(value[1:])
+                obj.name = obj.name[:-subtract]
+
+    elif value.endswith('+'):
+        for obj in bpy.context.selected_objects:
+            obj.name =  value[:-1] + obj.name
+    elif value.endswith('-'):
+        pass
+    ''''''
+    # Normal Rename
+
+
+    '''
+    y = 0
+    while y != 2:
+        x = 1
+        for obj in bpy.context.selected_objects:
+            if len(bpy.context.selected_objects) == 1:
+                obj.name = value
+            else:
+                if len(bpy.context.selected_objects) > 100:
+                    obj.name = value + "_" + str("%04g" % x)
+                else:
+                    obj.name = value + "_" + str("%02g" % x)
+
+            x += 1
+        y += 1
+    '''
+
+def get_obj_name(self):
+    active_obj = bpy.context.scene.objects.active
+    obj_name = ""
+    if active_obj != None:
+        obj_name = str(active_obj.name)
+    return obj_name
+
+bpy.types.Scene.object_names = StringProperty(get=get_obj_name, set=set_obj_name)
 
 #-------------------------#
 #--- Main Layout Panel ---#
@@ -677,38 +768,48 @@ class MainPanelObject(bpy.types.Panel):
         layout = self.layout
         scene = context.scene
 
-        # Selection Types
-        box = layout.box()
-        col = box.column(align=True)
-        col.label(text="Selection Types")
-        col.prop(bpy.context.scene, "select_by_type", text="")
-
         # Wireframe Views
-        box = layout.box()
-        row = box.row(align=True)
+        col = layout.column(align=True)
+        row = col.row(align=True)
         row.prop(bpy.context.scene, "edge_display_viewport", text="", icon="MESH_GRID", toggle=True)
         row.operator("object.align_objects", text="Align")
         row.operator("object.wireframe", text="", icon="LATTICE_DATA")
 
-        box = layout.box()
-        col = box.column(align=True)
+        # Selection Types
+        col.prop(bpy.context.scene, "select_by_type", text="")
+        col.separator()
+        col.separator()
+        col.separator()
+
+        col = layout.column(align=True)
+        col.label(text="Rename", icon='OBJECT_DATA')
+        row = col.row()
+        row.prop(bpy.context.scene, "object_names", text="")
+        col = layout.column(align=True)
+        col.separator()
+
+
+
 
         # Uv Operations
+        box = layout.box()
+        col = box.column(align=True)
         col.label(text="UV Tasks")
-        row = box.row(align=True)
-        row.prop(bpy.context.scene, "uv_unwrap_angle", text="")
+        row = col.row(align=True)
+
         row.operator("object.uv_unwrap_all", text="Unwrap")
+        row.prop(bpy.context.scene, "uv_unwrap_angle", text="")
 
         # Origin Manipulation
-        box = layout.box()
+        #box = layout.box()
         col = box.column(align=True)
         col.label(text="Origin Tools")
         row = box.row(align=True)
+        row = col.row(align=True)
         row.operator("object.origin_to_center", icon="LAYER_ACTIVE")
         row.operator("object.origin_selection", text="", icon="TRIA_RIGHT_BAR")
         row.operator("object.origin_z_pos", icon="TRIA_DOWN")
-        col = box.column(align=True)
-        col.operator("object.move_origin", icon="LAYER_ACTIVE")
+        col.operator("object.move_origin", icon="OUTLINER_OB_EMPTY")
 
 
 
@@ -819,7 +920,7 @@ def unregister():
     bpy.utils.unregister_class(ExportUVLayoutOperator)
     bpy.utils.unregister_class(SaveNormalOperator)
     bpy.utils.unregister_class(SaveBackupOperator)
-    bpy.utils.register_class(OverrideDeleteOperator)
+    bpy.utils.unregister_class(OverrideDeleteOperator)
     bpy.utils.unregister_class(AutoKeyFrameOperator)
     bpy.utils.unregister_class(OriginToZPosOperator)
     bpy.utils.unregister_class(OriginToCenterOperator)
