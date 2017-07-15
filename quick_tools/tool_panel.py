@@ -720,31 +720,40 @@ def set_obj_name(self, value):
                 subtract = int(value[1:])
                 obj.name = obj.name[:-subtract]
 
+    # Add String to Start
     elif value.endswith('+'):
         for obj in bpy.context.selected_objects:
             obj.name =  value[:-1] + obj.name
+
+    # Subtract String from Start
     elif value.endswith('-'):
-        pass
-    ''''''
-    # Normal Rename
-
-
-    '''
-    y = 0
-    while y != 2:
-        x = 1
         for obj in bpy.context.selected_objects:
+            if value[:-1].isdigit():
+                subtract = int(value[:-1])
+                print(subtract)
+                obj.name = obj.name[subtract:]
+
+    else:
+        selected_obj = bpy.context.selected_objects
+        active_obj = bpy.context.scene.objects.active
+
+        # Add Active object to start
+        selected_obj.pop(selected_obj.index(active_obj))
+        selected_obj.insert(0, active_obj)
+
+        for obj in selected_obj:
+            obj.name = "###############"
+
+        # Rename Objects with Numbers
+        for idx, obj in enumerate(selected_obj):
             if len(bpy.context.selected_objects) == 1:
                 obj.name = value
             else:
                 if len(bpy.context.selected_objects) > 100:
-                    obj.name = value + "_" + str("%04g" % x)
+                    obj.name = value + "_" + str("%04g" % idx)
                 else:
-                    obj.name = value + "_" + str("%02g" % x)
+                    obj.name = value + "_" + str("%02g" % idx)
 
-            x += 1
-        y += 1
-    '''
 
 def get_obj_name(self):
     active_obj = bpy.context.scene.objects.active
@@ -754,6 +763,17 @@ def get_obj_name(self):
     return obj_name
 
 bpy.types.Scene.object_names = StringProperty(get=get_obj_name, set=set_obj_name)
+
+"""--------------------#
+#--- Batch Renaming ---#bpy.context.scene.id_selection_sets.custom_1
+---------------------"""
+class MyPropertyGroup(bpy.types.PropertyGroup):
+    custom_1 = bpy.types.Object
+    custom_2 = bpy.props.IntProperty(name="My Int")
+
+bpy.utils.register_class(MyPropertyGroup)
+
+bpy.types.Scene.id_selection_sets = PointerProperty(type=MyPropertyGroup)
 
 #-------------------------#
 #--- Main Layout Panel ---#
