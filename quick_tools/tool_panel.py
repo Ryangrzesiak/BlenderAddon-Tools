@@ -775,6 +775,265 @@ bpy.utils.register_class(MyPropertyGroup)
 
 bpy.types.Scene.id_selection_sets = PointerProperty(type=MyPropertyGroup)
 
+#--------------#
+#   Functions  #
+#--------------#
+
+def update_scene():
+    bpy.context.scene.frame_current = bpy.context.scene.frame_current + 1
+    bpy.context.scene.frame_current = bpy.context.scene.frame_current - 1
+
+def get_timeline_view():
+    # Center Timeline
+    for area in bpy.context.screen.areas:
+        if area.type == 'TIMELINE':
+            for region in area.regions:
+                if region.type == 'WINDOW':
+                    ctx = bpy.context.copy()
+                    ctx[ 'area'] = area
+                    ctx['region'] = region
+                    return ctx
+                    break
+
+
+"""---------------------#
+#--- Action Position ---#
+----------------------"""
+# Setting Position
+def set_x_offset(self, value):
+    set_keyframe_position(value, 0)
+def set_y_offset(self, value):
+    set_keyframe_position(value, 1)
+def set_z_offset(self, value):
+    set_keyframe_position(value, 2)
+
+# Display Amount
+def get_x_offset(self):
+    return display_keyframe_position(0)
+def get_y_offset(self):
+    return display_keyframe_position(1)
+def get_z_offset(self):
+    return display_keyframe_position(2)
+
+
+### Action Blending Offset ###
+def set_keyframe_position(value, index):
+    try:
+        keyframe_list = []
+        action = bpy.context.object.animation_data.action
+        current_frame = bpy.context.scene.frame_current
+        # Add all Keyframes to list
+        for keyframe in action.fcurves[0].keyframe_points:
+            keyframe_list.append(keyframe.co[0])
+        # Set Keyframe to Value
+        if current_frame in keyframe_list:
+            keyframe_index = keyframe_list.index(current_frame)
+            action.fcurves[index].keyframe_points[keyframe_index].co[1] = value
+            action.fcurves[index].keyframe_points[keyframe_index].handle_left[1] = value
+            action.fcurves[index].keyframe_points[keyframe_index].handle_right[1] = value
+            bpy.context.scene.frame_current = current_frame
+    except:
+        pass
+
+def display_keyframe_position(index):
+    display_amount = 0.0
+    keyframe_list = []
+    try:
+        action = bpy.context.object.animation_data.action
+        current_frame = bpy.context.scene.frame_current
+        for keyframe in action.fcurves[0].keyframe_points:
+            keyframe_list.append(keyframe.co[0])
+
+        if current_frame in keyframe_list:
+            keyframe_index = keyframe_list.index(current_frame)
+            display_amount = action.fcurves[index].keyframe_points[keyframe_index].co[1]
+
+    except:
+        display_amount = 0.0
+
+    return display_amount
+
+bpy.types.Scene.xscale = FloatProperty(default=1.0, get=get_x_offset, set=set_x_offset)
+bpy.types.Scene.yscale = FloatProperty(default=1.0, get=get_y_offset, set=set_y_offset)
+bpy.types.Scene.zscale = FloatProperty(default=1.0, get=get_z_offset, set=set_z_offset)
+#----------------------#
+#--- Rename Actions ---#
+#----------------------#
+class RenameActionsOperator(bpy.types.Operator):
+    bl_idname = "object.rename_actions"
+    bl_label = ""
+    bl_options = {"REGISTER"}
+    def execute(self, context):
+        action_tracks = bpy.context.object.animation_data.nla_tracks
+
+        for track in action_tracks:
+            track.name = track.strips[0].action.name
+            track.strips[0].name = track.strips[0].action.name
+
+        return {"FINISHED"}
+
+#----------------------------#
+#   Set Actions on Timeline  #
+#----------------------------#
+bpy.types.Scene.ActionGroupCollection = bpy.props.CollectionProperty(type=bpy.types.PropertyGroup)
+bpy.types.Scene.ActionCollection = bpy.props.CollectionProperty(type=bpy.types.PropertyGroup)
+
+def set_action(self, value):
+
+    # If canceled, reset timeline
+    if value == "":
+        current_frame = bpy.context.scene.frame_current
+        bpy.context.active_object.animation_data_clear()
+
+        # Reset Frame range
+        timeline = get_timeline_view()
+        bpy.context.scene.frame_start = 1
+        bpy.context.scene.frame_end = 290
+        bpy.ops.time.view_all(timeline)
+        bpy.context.scene.frame_current = 125
+        bpy.ops.time.view_frame(timeline)
+        bpy.context.scene.frame_end = 250
+
+        return
+
+    action_name = bpy.data.actions.get(value)
+    selected_objects = bpy.context.selected_objects
+
+    # Return action name in the field
+    for obj in selected_objects:
+        obj.animation_data_create()
+        obj.animation_data.action = action_name
+
+    # Set timeline to action length
+    if bpy.context.active_object:
+        active_object = bpy.context.active_object.animation_data
+        frame_range = active_object.action.frame_range
+        window_offset = 2
+
+        # Add Frame Offset for centering
+        bpy.context.scene.frame_start = frame_range[0] - window_offset
+        bpy.context.scene.frame_end = frame_range[1] + window_offset
+
+        # Center Timeline
+        timeline = get_timeline_view()
+        bpy.ops.time.view_all(timeline)
+
+        # Fix Frame range
+        bpy.context.scene.frame_start = frame_range[0]
+        bpy.context.scene.frame_end = frame_range[1]
+
+
+
+def get_action(self):
+
+    if bpy.context.active_object:
+        active_obj = bpy.context.active_object.animation_data
+
+        # Update Dropdown List
+        bpy.context.scene.ActionCollection.clear()
+        for action in bpy.data.actions:
+            bpy.context.scene.ActionCollection.add().name = action.name
+
+        # Update Values
+        try:
+            if active_obj.action is not None:
+                return active_obj.action.name
+            else:
+                return ""
+        except:
+            return ""
+    return ""
+
+
+bpy.types.Scene.action_string = bpy.props.StringProperty(name="", get=get_action, set=set_action)
+''''''
+#------------------#
+#   Action Groups  #
+#------------------#
+def set_action_group(self, value):
+
+    # If canceled, reset timeline
+    if value == "":
+        current_frame = bpy.context.scene.frame_current
+        #bpy.context.active_object.animation_data_clear()
+
+
+
+
+def get_action_group(self):
+    if bpy.context.active_object:
+        active_obj = bpy.context.active_object.animation_data
+
+        # Update Dropdown List
+        bpy.context.scene.ActionGroupCollection.clear()
+        for action in bpy.data.actions:
+            if "|" in str(action.name):
+                name_list = action.name.split("|")
+                if len(name_list) > 2:
+                    bpy.context.scene.ActionGroupCollection.add().name = name_list[-1]
+                else:
+                    bpy.context.scene.ActionGroupCollection.add().name = name_list[1]
+        #bpy.context.scene.ActionGroupCollection.add().name = "No Groups"
+
+
+        # Update Values
+        try:
+            if active_obj.action is not None:
+                if "|" in str(active_obj.action.name):
+                    name_list = active_obj.action.name.split("|")
+                    if len(name_list) > 2:
+                        return name_list[-1]
+                    elif len(name_list) == 2:
+                        return name_list[1]
+        except:
+            return ""
+    return ""
+
+bpy.types.Scene.ActionGroupString = bpy.props.StringProperty(name="", get=get_action_group, set=set_action_group)
+
+def items_action_group(self, context):
+    items = []
+
+    # Add Actions to List
+    for action in bpy.data.actions:
+        action_name = (action.name, action.name, "")
+        items.append(action_name)
+
+
+
+    #return display_sets = ["Ryan","Ryan",'',1]
+    return items
+bpy.types.Scene.action_group = bpy.props.EnumProperty(items=items_action_group, set=set_action_group, name="Action Groups")
+
+
+
+#bpy.types.Scene.coll = bpy.props.CollectionProperty(type=bpy.types.PropertyGroup)
+
+#-----------------------#
+#--- SubLayout Panel ---#
+#-----------------------#
+class SubPanelObject(bpy.types.Panel):
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "TOOLS"
+    bl_context = ""
+    bl_label = "Action"
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        col = layout.column(align=True)
+        col.separator()
+        col.operator("object.rename_actions", text="Rename Action Tracks")
+        col.separator()
+        col.prop(bpy.context.scene, "action_group", text="")
+        #col.prop_search(scene, "action_string", scene, "ActionCollection", icon="ACTION")
+        col.separator()
+        col.prop(bpy.context.scene, "xscale", text="X")
+        col.prop(bpy.context.scene, "yscale", text="Y")
+        col.prop(bpy.context.scene, "zscale", text="Z")
+
+
 #-------------------------#
 #--- Main Layout Panel ---#
 #-------------------------#
@@ -898,7 +1157,11 @@ addon_keymaps =[]
 
 def register():
     #bpy.utils.register_module(__name__)
+    #bpy.types.Scene.ActionGroupCollection = bpy.props.CollectionProperty(type=bpy.types.PropertyGroup)
+    #bpy.types.Scene.ActionCollection = bpy.props.CollectionProperty(type=bpy.types.PropertyGroup)
+
     bpy.utils.register_class(MainPanelObject)
+    bpy.utils.register_class(SubPanelObject)
     bpy.utils.register_class(WireFrameOperator)
     bpy.utils.register_class(EdgeDisplayOperator)
     bpy.utils.register_class(AlignObjectsOperator)
@@ -912,6 +1175,7 @@ def register():
     bpy.utils.register_class(OriginToCenterOperator)
     bpy.utils.register_class(OriginToSelectionOperator)
     bpy.utils.register_class(MoveOriginOperator)
+    bpy.utils.register_class(RenameActionsOperator)
 
 
     #Keymaps
@@ -933,6 +1197,7 @@ def unregister():
 
     addon_keymaps.clear()
     bpy.utils.unregister_class(MainPanelObject)
+    bpy.utils.unregister_class(SubPanelObject)
     bpy.utils.unregister_class(WireFrameOperator)
     bpy.utils.unregister_class(EdgeDisplayOperator)
     bpy.utils.unregister_class(AlignObjectsOperator)
@@ -946,3 +1211,4 @@ def unregister():
     bpy.utils.unregister_class(OriginToCenterOperator)
     bpy.utils.unregister_class(OriginToSelectionOperator)
     bpy.utils.unregister_class(MoveOriginOperator)
+    bpy.utils.unregister_class(RenameActionsOperator)

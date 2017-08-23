@@ -61,10 +61,10 @@ class FileImporterOperator(bpy.types.Operator, ImportHelper):
             path_name = os.path.join(folder, file.name)
 
             if path_name.endswith('.obj'):
-                bpy.ops.import_object.obj(filepath = path_name)
+                bpy.ops.import_scene.obj(filepath = path_name)
 
             elif path_name.endswith('.fbx'):
-                bpy.ops.import_object.fbx(filepath = path_name)
+                bpy.ops.import_scene.fbx(filepath = path_name)
 
             #Change imported names
             for obj in bpy.context.selected_objects:

@@ -28,6 +28,10 @@ def get_file_path(fbx_location, export_type, fbx_animation):
         elif action_mode == 'NLA Actions':
             selected_strip = [strip.name for strip in bpy.context.object.animation_data.nla_tracks if strip.select]
 
+            if len(selected_strip[0].split("|")) == 3:
+                temp_name = selected_strip[0].split("|")
+                selected_strip[0] = temp_name[0] + "|" + temp_name[1]
+
             if save_location.endswith("\\"):
                 file_path = os.path.join(save_location, bpy.path.clean_name(selected_strip[0]) + export_type)
 
@@ -189,6 +193,7 @@ def fbx_to_file(fbx_animation, fbx_location, fbx_action_mode=None, forward='Z', 
             use_tspace=tspace, \
             add_leaf_bones=False, \
             use_armature_deform_only=fbx_deform, \
+            bake_anim_simplify_factor=0.0, \
             #use_armature_as_root=False, \
             bake_anim=animation, \
             bake_anim_force_startend_keying=True, \
@@ -274,14 +279,32 @@ def character():
 
             # Toggle Strips for exporting
             for nla in active_strips:
+                strip_list = nla.name.split("|")
+
+
+                # Clear All Strips
                 for sub_nla in active_strips:
                     sub_nla.mute = True
                     sub_nla.select = False
-                nla.mute = False
-                nla.select = True
 
-                scene.frame_start = 0
-                scene.frame_end = nla.strips[-1].frame_end
+                # look For Duplicate clips
+                if len(strip_list) == 3:
+                    strip_name = strip_list[0] + "|" + strip_list[1]
+                    for nla in active_strips:
+                        if nla.name.startswith(strip_name):
+                            nla.mute = False
+                            nla.select = True
+                            scene.frame_start = 0
+                            if scene.frame_end < nla.strips[-1].frame_end:
+                                scene.frame_end = nla.strips[-1].frame_end
+
+                else:
+                    nla.mute = False
+                    nla.select = True
+                    scene.frame_start = 0
+                    scene.frame_end = nla.strips[-1].frame_end
+
+
                 fbx_to_file(fbx_animation, animation_location, 'Single Action')
 
             # Restore
