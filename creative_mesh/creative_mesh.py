@@ -1,7 +1,7 @@
 import bpy
 from bpy_extras import view3d_utils
 
-def main(context, event, obj_plane):
+def main(context, event, obj_plane, obj_special, click, origin_location):
     """Run this function on left mouse, execute the ray cast"""
     # get the context arguments
     scene = context.scene
@@ -12,6 +12,7 @@ def main(context, event, obj_plane):
     # get the ray from the viewport and mouse
     view_vector = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
     ray_origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
+    ray_location = view3d_utils.region_2d_to_location_3d(region, rv3d, coord,view_vector)
 
     ray_target = ray_origin + view_vector
 
@@ -37,18 +38,50 @@ def main(context, event, obj_plane):
     best_obj = None
     obj_plane = None
 
+    # Create Raytraced Plane
     if bpy.data.objects.get("CreativeMeshRayCast") is None:
         bpy.ops.mesh.primitive_plane_add(view_align=False, enter_editmode=False, location=(0, 0, 0))
         obj_plane = bpy.context.object
         obj_plane.scale = [100, 100, 100]
+        obj_plane.draw_type = 'WIRE'
         obj_plane.name = "CreativeMeshRayCast"
     else:
         obj_plane = bpy.data.objects["CreativeMeshRayCast"]
 
+    if bpy.data.objects.get("CreativeSpecialMesh") is None:
+        bpy.ops.mesh.primitive_cube_add(view_align=False, enter_editmode=False)
+        obj_special = bpy.context.object
+        obj_special.location = [1, 1, 1]
+        obj_special.name = "CreativeSpecialMesh"
+        scene.cursor_location = [0,0,0]
+        bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+        obj_special.scale = [0,0,0]
+        print("Hello")
+
+    else:
+        obj_plane = bpy.data.objects["CreativeMeshRayCast"]
+
     hit, normal, face_index = obj_ray_cast(obj_plane, obj_plane.matrix_world.copy())
+    scene.cursor_location = [0,0,0]
+
     if hit is not None:
         hit_world = obj_plane.matrix_world.copy() * hit
-        scene.cursor_location = hit_world
+        #scene.cursor_location = hit_world
+        if obj_special is not None:
+            if click == 1:
+                origin_location = hit_world
+                obj_special.location = origin_location
+                click = 1
+            elif click == 2:
+                scale_x = (hit_world[0] - origin_location[0])/2
+                scale_y = (hit_world[1] - origin_location[1])/2
+                obj_special.scale = [scale_x,scale_y,0.001]
+                origin_location[2] = ray_location[2]
+            elif click == 3:
+                scale_z = ray_location[2] - origin_location[2]
+                obj_special.scale[2] = scale_z
+
+    return obj_plane, obj_special, click, origin_location
 
 
 
@@ -58,7 +91,9 @@ class CreateMeshOperator(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     obj_plane = ""
+    obj_special = None
     origin_location = []
+    click = 0
 
     def modal(self, context, event):
         if event.type in {'G'}:
@@ -82,7 +117,17 @@ class CreateMeshOperator(bpy.types.Operator):
 
 
         if event.type == 'MOUSEMOVE':
-            main(context, event, self.obj_plane)
+            self.obj_plane, self.obj_special, self.click, self.origin_location = main(context, event, self.obj_plane, self.obj_special, self.click, self.origin_location)
+
+        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+            self.click += 1
+            print(self.click)
+
+            if self.click == 4:
+                context.area.header_text_set()
+                bpy.context.screen.scene = bpy.context.screen.scene
+                bpy.data.objects.remove(self.obj_plane, True)
+                return {'CANCELLED'}
 
         # FINISHED: Confirm Operation
         #if event.type == 'G':
