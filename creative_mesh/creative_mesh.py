@@ -1,7 +1,7 @@
 import bpy
 from bpy_extras import view3d_utils
 
-def main(context, event):
+def main(context, event, obj_plane):
     """Run this function on left mouse, execute the ray cast"""
     # get the context arguments
     scene = context.scene
@@ -57,8 +57,7 @@ class CreateMeshOperator(bpy.types.Operator):
     bl_label = "Widget Tool"
     bl_options = {"REGISTER", "UNDO"}
 
-    empty_obj = ""
-    active_obj = ""
+    obj_plane = ""
     origin_location = []
 
     def modal(self, context, event):
@@ -83,7 +82,7 @@ class CreateMeshOperator(bpy.types.Operator):
 
 
         if event.type == 'MOUSEMOVE':
-            main(context, event)
+            main(context, event, self.obj_plane)
 
         # FINISHED: Confirm Operation
         #if event.type == 'G':
@@ -94,12 +93,13 @@ class CreateMeshOperator(bpy.types.Operator):
         elif event.type in {'ESC', 'ENTER'}:
             context.area.header_text_set()
             bpy.context.screen.scene = bpy.context.screen.scene
+            bpy.data.objects.remove(self.obj_plane, True)
             return {'CANCELLED'}
 
         return {'RUNNING_MODAL'}
 
     def invoke(self, context, event):
-        if context.space_data.type == 'VIEW_3D:
+        if context.space_data.type == 'VIEW_3D':
             wm = context.window_manager
             wm.modal_handler_add(self)
             return {'RUNNING_MODAL'}
