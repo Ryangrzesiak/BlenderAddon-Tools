@@ -66,6 +66,8 @@ def add_cube():
     bpy.context.scene.cursor_location = [0,0,0]
     bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
     obj_cube.scale = [0,0,0]
+    obj_cube.show_wire = True
+    #obj_cube.show_x_ray = True
     return obj_cube
 
 def origin_to_bottom_z():
@@ -163,7 +165,41 @@ def uv_texture_project():
     bpy.ops.uv.smart_project()
     bpy.ops.object.editmode_toggle()
 
-
+# Snap Vector
+def snap_value(snap_vector, has_scale, event):
+    if isinstance(snap_vector, Vector):
+        if event.ctrl and event.shift:
+            if has_scale == True:
+                snap_vector[0] = round(snap_vector[0], 1)/2
+                snap_vector[1] = round(snap_vector[1], 1)/2
+                snap_vector[2] = round(snap_vector[2], 1)/2
+            else:
+                snap_vector[0] = round(snap_vector[0], 1)
+                snap_vector[1] = round(snap_vector[1], 1)
+                snap_vector[2] = round(snap_vector[2], 1)
+        elif event.ctrl:
+            if has_scale == True:
+                snap_vector[0] = round(snap_vector[0], 0)/2
+                snap_vector[1] = round(snap_vector[1], 0)/2
+                snap_vector[2] = round(snap_vector[2], 0)/2
+            else:
+                snap_vector[0] = round(snap_vector[0], 0)
+                snap_vector[1] = round(snap_vector[1], 0)
+                snap_vector[2] = round(snap_vector[2], 0)
+    elif isinstance(snap_vector, float):
+            if event.ctrl and event.shift:
+                if has_scale == True:
+                    snap_vector = round(snap_vector * 2, 1)/2
+                    print(snap_vector)
+                else:
+                    snap_vector = round(snap_vector, 1)
+            elif event.ctrl:
+                if has_scale == True:
+                    snap_vector = round(snap_vector*2, 0)/2
+                    print(snap_vector)
+                else:
+                    snap_vector = round(snap_vector, 0)
+    return snap_vector
 
 
 class CreateMeshOperator(bpy.types.Operator):
@@ -172,15 +208,15 @@ class CreateMeshOperator(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     raycast_plane = None
+    default_raycast_plane = None
     obj_cube = None
     origin_location = []
     click = 0
 
     def modal(self, context, event):
         context.area.header_text_set(
-        "Add Objects: LClick and Drag, "
-        "Cancel: (Esc/RClick), "
-        "Location (G): (ON), Rotation (R): (OFF), Scale (S): (OFF)")
+        "Add Objects: LClick "
+        "Cancel: (Esc/RClick)")
 
 
         # Allow navigation to pass through
@@ -191,33 +227,75 @@ class CreateMeshOperator(bpy.types.Operator):
                 return {'PASS_THROUGH'}
 
         if event.type == 'MOUSEMOVE':
-            # Start drawing Cube
+
+            # Find ray hit location
             matrix = self.raycast_plane.matrix_world.copy()
             hit = obj_ray_cast(self.raycast_plane, matrix, event)
-
             view_vector, ray_origin, ray_location, ray_target = find_ray(event)
 
-            if self.click > 0:
-                if hit is not None and self.obj_cube is not None:
-                    hit_world = matrix * hit
-                    if self.click == 1:
-                        self.origin_location = hit_world
-                        self.obj_cube.location = self.origin_location
-                        self.click = 2
-                    elif self.click == 2:
-                        scale_x = (hit_world[0] - self.origin_location[0])/2
-                        scale_y = (hit_world[1] - self.origin_location[1])/2
-                        self.obj_cube.scale = [scale_x,scale_y,0.01]
-                        self.origin_location[2] = ray_location[2]
-                if self.click == 3:
-                    scale_z = ray_location[2]/2 - self.origin_location[2]
-                    self.obj_cube.scale[2] = scale_z
-
-            elif self.click == 0:
-                if self.obj_cube is not None:
-                    self.obj_cube.location = ray_location
+            best_length_squared = -1.0
+            best_obj = None
 
 
+            if self.click < 2 and bpy.context.scene.snap_to_objects:
+                # Find raycast objects
+                for obj in bpy.data.objects:
+                    if obj.type == 'MESH' and obj != self.obj_cube:
+                        matrix = obj.matrix_world.copy()
+                        hit = obj_ray_cast(obj, matrix, event)
+                        if hit is not None:
+                            hit_world = matrix * hit
+                            length_squared = (hit_world - ray_origin).length_squared
+                            if best_obj is None or length_squared < best_length_squared:
+                                best_length_squared = length_squared
+                                best_obj = obj
+            else:
+                best_obj = self.default_raycast_plane
+
+            # Set raycast obje depending on object hovering over
+            if best_obj is not None:
+                matrix = best_obj.matrix_world.copy()
+                hit = obj_ray_cast(best_obj, matrix, event)
+                self.raycast_plane = best_obj
+
+
+
+
+            if hit is not None and self.obj_cube is not None:
+                # Place cube at cursor location
+                hit_world = matrix * hit
+
+                # Have the cube follow the cursor
+                if self.click == 0:
+                    if self.obj_cube is not None:
+                        snap_location = snap_value(Vector(hit_world), False, event)
+                        self.obj_cube.location = snap_location
+
+                # Place the cube at the cursor
+                elif self.click == 1:
+                    self.origin_location = hit_world
+                    location = snap_value(Vector(self.origin_location), False, event)
+                    self.obj_cube.location = location
+                    self.click = 2
+
+                # Scale cube along X and Y axis
+                elif self.click == 2:
+                    scale_x = (hit_world[0] - self.origin_location[0])/2
+                    scale_y = (hit_world[1] - self.origin_location[1])/2
+                    scale_x = snap_value(scale_x, True, event)
+                    scale_y = snap_value(scale_y, True, event)
+                    self.obj_cube.scale = [scale_x,scale_y,0.001]
+                    self.origin_location[2] = ray_location[2]
+
+            # Scale cube along Z axis
+            if self.click == 3:
+                scale_z = ray_location[2]/2 - self.origin_location[2]
+                scale_z = snap_value(scale_z, True, event)
+                self.obj_cube.scale[2] = scale_z
+
+
+
+        # Setup and add cube to the scene
         if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
             # Create cube object
             if self.obj_cube is None:
@@ -235,20 +313,40 @@ class CreateMeshOperator(bpy.types.Operator):
         # Release mouse
         if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
             view_vector, ray_origin, ray_location, ray_target = find_ray(event)
-            # Set inital z-scale
-            if self.click == 2:
+
+            # Delete object if the mouse hasn't moved
+            if self.click == 1:
+                bpy.data.objects.remove(self.obj_cube, True)
+                self.click = 0
+                # Add new cube
+                self.obj_cube = add_cube()
+                if bpy.context.scene.uv_texture_project:
+                    uv_texture_project()
+
+            # Start scaling object along z-axis
+            elif self.click == 2:
                 self.click = 3
-                self.origin_location[2] = ray_location[2]/2
-            # Create new object
+                scale_z = ray_location[2]/2
+                scale_z = snap_value(scale_z, True, event)
+                self.origin_location[2] = scale_z
+
+            # Finalize the created object
             elif self.click == 3:
                 bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
                 bpy.ops.object.editmode_toggle()
                 bpy.ops.mesh.normals_make_consistent(inside=False)
                 bpy.ops.object.editmode_toggle()
                 bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
-                origin_to_bottom_z()
 
                 self.click = 0
+                self.obj_cube.show_wire = False
+
+                if bpy.context.scene.pivot_point_center == True:
+                    bpy.ops.object.origin_to_center()
+                else:
+                    origin_to_bottom_z()
+
+                # Add new cube
                 self.obj_cube = add_cube()
                 if bpy.context.scene.uv_texture_project:
                     uv_texture_project()
@@ -259,7 +357,7 @@ class CreateMeshOperator(bpy.types.Operator):
         if event.type in {'ESC', 'ENTER', 'RIGHTMOUSE'}:
             context.area.header_text_set()
             bpy.context.screen.scene = bpy.context.screen.scene
-            bpy.data.objects.remove(self.raycast_plane, True)
+            bpy.data.objects.remove(self.default_raycast_plane, True)
             bpy.data.objects.remove(self.obj_cube, True)
             return {'CANCELLED'}
 
@@ -273,6 +371,7 @@ class CreateMeshOperator(bpy.types.Operator):
 
             # Create Objects
             self.raycast_plane = add_raycast_plane()
+            self.default_raycast_plane = self.raycast_plane
             self.obj_cube = add_cube()
 
             if bpy.context.scene.uv_texture_project:
@@ -284,6 +383,8 @@ class CreateMeshOperator(bpy.types.Operator):
 
 
 bpy.types.Scene.uv_texture_project = BoolProperty()
+bpy.types.Scene.pivot_point_center = BoolProperty()
+bpy.types.Scene.snap_to_objects = BoolProperty()
 
 
 #-------------------------#
@@ -303,6 +404,8 @@ class CreativePanelObject(bpy.types.Panel):
         col = layout.column(align=True)
         col.label(text="Settings")
         col.prop(bpy.context.scene, "uv_texture_project", text="UV Layout")
+        col.prop(bpy.context.scene, "pivot_point_center", text="Pivot Point Center")
+        col.prop(bpy.context.scene, "snap_to_objects", text="Snap To Objects")
         col.separator()
         col.label(text="Objects")
         col.operator("object.create_mesh", text="Cube", icon="MESH_CUBE")
