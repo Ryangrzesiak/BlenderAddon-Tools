@@ -15,22 +15,22 @@ from bpy.types import (
         )
 from bpy_extras.io_utils import ImportHelper
 
-def load_previews(self, context):
+def generate_previews(file_name, path_name):
+    print("hello")
+    global preview_collections
     import_type = bpy.context.scene.import_type
     import_list = []
     enum_items = []
     scene = bpy.context.scene
-    directory = scene.my_previews_dir
+    directory = path_name
 
-    if context is None:
-        return enum_items
-
-    # Get the preview collection (defined in register func).
-    pcoll = preview_collections["main"]
-
-    # Check if File or Import type has been changed
-    if directory + "//" + import_type == pcoll.my_previews_dir:
-        return pcoll.my_previews
+    # Set up image preview collection
+    #for pcoll in preview_collections.values():
+        #bpy.utils.previews.remove(pcoll)
+        #print("hello")
+    pcoll = bpy.utils.previews.new()
+    pcoll.my_previews_dir = ""
+    pcoll.my_previews = ()
 
 
     if directory and os.path.exists(directory):
@@ -38,6 +38,7 @@ def load_previews(self, context):
         if import_type == "Group":
             with bpy.data.libraries.load(directory) as (data_from, data_to):
                 import_list = data_from.groups
+
         elif import_type == "Object":
             with bpy.data.libraries.load(directory) as (data_from, data_to):
                 import_list = data_from.objects
@@ -45,20 +46,52 @@ def load_previews(self, context):
             with bpy.data.libraries.load(directory) as (data_from, data_to):
                 import_list = data_from.materials
 
+        preview_collections[file_name[:-6]+import_type] = pcoll
 
-        # Clears Preview and Reloads
-        pcoll.clear()
+        #pcoll.clear()
         for i, name in enumerate(import_list):
             filepath = os.path.join(directory, import_type, str(import_list[i]))
             thumb = pcoll.load(filepath, filepath, 'BLEND')
             #print(thumb)
             enum_items.append((name, name, "", thumb.icon_id, i))
             bpy.context.scene.asset_test_collection.add().name = name
-        print(pcoll)
+
 
     pcoll.my_previews = enum_items
-    pcoll.my_previews_dir = directory + "//" + import_type
+    pcoll.my_previews_dir = directory
+
+
+
+
+def load_previews(self, context):
+    import_type = bpy.context.scene.import_type
+    global preview_collections
+    global file_list_index
+    global file_list
+    scene = bpy.context.scene
+    directory = scene.my_previews_dir
+
+    # Search for image preview collections
+    if len(file_list) > 0:
+        file_name = ""
+
+        for item in file_list:
+            if str(item[3]) == str(file_list_index):
+                file_name = item[1]
+                file_name = file_name + import_type
+
+        if file_name in preview_collections:
+            pcoll = preview_collections[file_name]
+            return pcoll.my_previews
+
+    # Return default list
+    pcoll = preview_collections["AssetLinkingMain"]
     return pcoll.my_previews
+
+
+
+
+
 
 
 
@@ -188,6 +221,37 @@ def set_import_type(self, value):
     bpy.context.scene.import_type_index = value
     test = load_previews(self, bpy.context)
 
+    import_type = bpy.context.scene.import_type
+    global preview_collections
+    global file_list_index
+    global file_list
+    scene = bpy.context.scene
+
+    # Search for image preview collections
+    if len(file_list) > 0:
+        file_name = ""
+        file_path = ""
+
+        # File Name
+        for item in file_list:
+            if str(item[3]) == str(file_list_index):
+                file_name = item[1]
+
+        # File Path
+        for files in preview_collections:
+            if files.startswith(file_name):
+                file_path = preview_collections[files].my_previews_dir
+
+        # Generate Previews
+        if file_name+import_type not in preview_collections:
+            print("Not in")
+            generate_previews(file_name+".blend", file_path)
+            #load_previews(self, bpy.context)
+
+
+
+
+
 bpy.types.Scene.import_type = EnumProperty(
         items=import_type_list,
         name="Import Type",
@@ -231,17 +295,21 @@ class FilePathOperator(bpy.types.Operator, ImportHelper):
         bpy.context.scene.added_import_file = True
         folder = (os.path.dirname(self.filepath))
         global file_list
+        global preview_collections
         global file_list_index
         # iterate through the selected files
         for file in self.files:
             path_name = os.path.join(folder, file.name)
-            temp_list = (path_name, file.name[:-6], "", len(file_list) + 1)
+            temp_list = (path_name, file.name[:-6], "", len(file_list))
             file_list.append(temp_list)
+
+            if file.name not in preview_collections:
+                generate_previews(file.name, path_name)
 
         return {"FINISHED"}
 
 file_list = []
-file_list_index = 1
+file_list_index = 0
 
 def dyn_import_list(self, context):
     #file_list = [('No Animation', 'No Animation', "", 1)]
@@ -284,7 +352,8 @@ class AssetLinkingPanelObject(bpy.types.Panel):
 
 
         #col.label("Directory Path:")
-        #col.prop(scene, "my_previews_dir")
+        col = layout.column(align=True)
+        col.prop(scene, "my_previews_dir")
         row = layout.row(align=True)
         row.prop(scene, "import_type", expand=True)
         col = layout.column(align=True)
@@ -340,11 +409,11 @@ preview_collections = {}
 
 def register():
     bpy.types.Scene.asset_test_collection = bpy.props.CollectionProperty(type=bpy.types.PropertyGroup)
-
     pcoll = bpy.utils.previews.new()
     pcoll.my_previews_dir = ""
     pcoll.my_previews = ()
-    preview_collections["main"] = pcoll
+    preview_collections["AssetLinkingMain"] = pcoll
+
     bpy.utils.register_class(AssetLinkingPanelObject)
     bpy.utils.register_class(ObjectsLinkOperator)
     bpy.utils.register_class(ObjectsAppendOperator)
