@@ -31,6 +31,11 @@ from ryan_tools.edit_groups import (
 from ryan_tools.material_creator import (
     material_creator,
     )
+
+from ryan_tools.asset_linking import (
+    asset_linking,
+    )
+
 '''
 from ryan_tools.action_editor import (
     action_editor,
