@@ -33,6 +33,7 @@ def generate_previews(file_name, path_name):
 
 
     if directory and os.path.exists(directory):
+        test_name = ""
         # Browse Blender File
         if import_type == "Group":
             with bpy.data.libraries.load(directory) as (data_from, data_to):
@@ -41,6 +42,7 @@ def generate_previews(file_name, path_name):
         elif import_type == "Object":
             with bpy.data.libraries.load(directory) as (data_from, data_to):
                 import_list = data_from.objects
+                print(dir(data_from))
         elif import_type == "Material":
             with bpy.data.libraries.load(directory) as (data_from, data_to):
                 import_list = data_from.materials
@@ -51,7 +53,6 @@ def generate_previews(file_name, path_name):
         for i, name in enumerate(import_list):
             filepath = os.path.join(directory, import_type, str(import_list[i]))
             thumb = pcoll.load(filepath, filepath, 'BLEND')
-            #print(thumb)
             enum_items.append((name, name, "", thumb.icon_id, i))
             #print(thumb.icon_id)
             #bpy.context.scene.asset_test_collection.add().name = name
@@ -90,14 +91,19 @@ def load_previews(self, context):
                 if str(item[3]) == str(file_list_index):
                     file_name = item[1]
                     path_name = item[0]
-                    print("hello")
-                    preview_collections.clear()
-                    generate_previews(file_name, path_name)
+                    #preview_collections.clear()
+                    generate_previews(file_name+".blend", path_name)
 
 
     # Return default list
+    if "AssetLinkingMain" not in preview_collections:
+        pcoll = bpy.utils.previews.new()
+        pcoll.my_previews_dir = ""
+        pcoll.my_previews = ()
+        preview_collections["AssetLinkingMain"] = pcoll
+
     pcoll = preview_collections["AssetLinkingMain"]
-    return [("name", "name", "")]
+    return pcoll
 
 
 
@@ -123,18 +129,24 @@ class ObjectsLinkOperator(bpy.types.Operator):
         import_type = bpy.context.scene.import_type
         selected_obj = bpy.context.selected_objects
         scene = bpy.context.scene
-        directory = scene.my_previews_dir
+        directory = bpy.context.scene.imported_files
+        cursor_location = bpy.context.scene.cursor_location
+        print(directory)
 
         if import_type == "Group":
             with bpy.data.libraries.load(directory, link=True) as (data_from, data_to):
                 data_to.groups = [scene.my_previews]
 
             # Link Groups to current scene
-            for group in data_to.groups:
+            for groups in data_to.groups:
                 instance = bpy.data.objects.new('dupli_group', None)
-                instance.dupli_type = group.name
-                instance.dupli_group = group
+                instance.dupli_type = "GROUP"
+                instance.dupli_group = groups
+                instance.name = groups.name
+                instance.empty_draw_size = 0.01
+                instance.location = cursor_location
                 scene.objects.link(instance)
+
 
         elif import_type == "Object":
             with bpy.data.libraries.load(directory, link=True) as (data_from, data_to):
@@ -153,21 +165,28 @@ class ObjectsLinkOperator(bpy.types.Operator):
             with bpy.data.libraries.load(directory, link=True) as (data_from, data_to):
                 data_to.materials = [scene.my_previews]
 
-                # Create material on object
-                scene_mat = bpy.data.materials.get(scene.my_previews)
+            print(data_to.materials)
+            material = None
+            for mat in bpy.data.materials:
+                print(mat.library)
+                if mat.library is not None and scene.my_previews == mat.name:
+                    material = mat
 
-                # Apply material to object
-                for material_obj in selected_obj:
-                    if scene_mat is None:
-                        # create material
-                        scene_mat = bpy.data.materials.new(name="Material")
+            # Create material on object
+            #scene_mat = bpy.data.materials.get(material)
 
-                    if material_obj.data.materials:
-                        material_obj.data.materials[0] = scene_mat
-                    else:
-                        material_obj.data.materials.append(scene_mat)
+            # Apply material to object
+            for material_obj in selected_obj:
+                if material is None:
+                    # create material
+                    scene_mat = bpy.data.materials.new(name="Material")
 
-                bpy.context.screen.scene = bpy.context.screen.scene
+                if material_obj.data.materials:
+                    material_obj.data.materials[0] = material
+                else:
+                    material_obj.data.materials.append(material)
+
+            bpy.context.screen.scene = bpy.context.screen.scene
 
 
         return {"FINISHED"}
@@ -217,8 +236,8 @@ class ObjectsAppendOperator(bpy.types.Operator):
 bpy.types.Scene.import_type_index = IntProperty(default=1)
 import_type_list = [
     ("Group", "Groups", "", "GROUP", 1),
-    ("Object", "Objects", "", "OBJECT_DATA", 2),
-    ("Material", "Materials", "", "MATERIAL", 3),
+    #("Object", "Objects", "", "OBJECT_DATA", 2),
+    ("Material", "Materials", "", "MATERIAL", 2),
     ]
 
 def get_import_type(self):
@@ -337,41 +356,12 @@ class FilePathOperator(bpy.types.Operator, ImportHelper):
 
         return {"FINISHED"}
 
-file_list = []
-file_list_index = 0
-
-def dyn_import_list(self, context):
-    #file_list = [('No Animation', 'No Animation', "", 1)]
-    global file_list
-    file_list = []
-
-    pcoll = bpy.utils.previews.new()
-    pcoll.my_previews_dir = ""
-    pcoll.my_previews = ()
-    preview_collections["AssetLinkingMain"] = pcoll
-
-    for files in bpy.context.scene.file_collection:
-        temp_list = (files.file_path , files.file_name , "", len(file_list))
-        file_list.append(temp_list)
-        #print(files.file_name)
-    #temp_list = (path_name, file.name[:-6], "", len(file_list))
-    #file_list.append(temp_list)
 
 
-    return file_list
 
-def get_import_list(self):
-    global file_list_index
-    return file_list_index
-
-def set_import_list(self, value):
-    global file_list_index
-    file_list_index = value
-
-bpy.types.Scene.imported_files = EnumProperty(items=dyn_import_list, get=get_import_list, set=set_import_list)
-bpy.types.Scene.added_import_file = BoolProperty(default=False)
-
-### Main Panel
+##################
+### Main Panel ###
+##################
 class AssetLinkingPanelObject(bpy.types.Panel):
     """Creates a Panel in the Object properties window"""
     bl_label = "Asset Linking"
@@ -384,9 +374,6 @@ class AssetLinkingPanelObject(bpy.types.Panel):
 
         # Import Path
         #col.operator("object.refresh_preview", text="Refresh Previews")
-
-
-
 
 
         # Folders
@@ -410,6 +397,7 @@ class AssetLinkingPanelObject(bpy.types.Panel):
         col = layout.column(align=False)
         col.separator()
         col.template_icon_view(scene, "my_previews")
+
         #col.template_ID(scene, "my_previews")
         col.prop(scene, "my_previews", text="")
         #col.prop_search(scene, "asset_names", scene, "asset_test_collection", icon='OBJECT_DATA', emboss=True)
@@ -419,44 +407,42 @@ class AssetLinkingPanelObject(bpy.types.Panel):
         row = layout.row(align=True)
         row.operator("object.link_objects", text="Link")
         row.operator("object.append_objects", text="Append")
+        ''''''
 
 
 
+file_list = []
+file_list_index = 0
 
-def get_asset_names(self):
-    #for asset in bpy.context.scene.my_previews:
-    if bpy.context.active_object:
+def dyn_import_list(self, context):
+    global file_list
+    file_list = []
 
-        # Update Dropdown List
-        bpy.context.scene.ActionCollection.clear()
-        for asset in bpy.context.scene.my_previews:
-            pass
-            #bpy.context.scene.asset_test_collection.add().name = asset[0]
+    for files in bpy.context.scene.file_collection:
+        temp_list = (files.file_path , files.file_name , "", len(file_list))
+        file_list.append(temp_list)
 
-        # Update Values
-        try:
-            #if active_obj.action is not None:
-                #return active_obj.action.name
-            #else:
-            return ""
-        except:
-            return ""
-    return ""
+    return file_list
 
-bpy.types.Scene.asset_names = StringProperty(
-        name=""
-        )
+def get_import_list(self):
+    global file_list_index
+    return file_list_index
 
-bpy.types.Scene.my_previews_dir = StringProperty(
-        name="",
-        subtype='FILE_PATH',
-        default=""
-        )
+def set_import_list(self, value):
+    global file_list_index
+    file_list_index = value
+
+bpy.types.Scene.imported_files = EnumProperty(items=dyn_import_list, get=get_import_list, set=set_import_list)
+bpy.types.Scene.added_import_file = BoolProperty(default=False)
 
 
 
+bpy.types.Scene.asset_names = StringProperty(name="")
+bpy.types.Scene.my_previews_dir = StringProperty(name="", subtype='FILE_PATH', default="")
+
+
+# Change item count to zero when switching categories
 asset_item = 0
-
 def get_asset_item(self):
     global asset_item
     return asset_item
@@ -472,15 +458,8 @@ bpy.types.Scene.my_previews = EnumProperty(
         )
 
 preview_collections = {}
-pcoll = bpy.utils.previews.new()
-pcoll.my_previews_dir = ""
-pcoll.my_previews = ()
-preview_collections["AssetLinkingMain"] = pcoll
 
 def register():
-    #bpy.types.Scene.asset_test_collection = bpy.props.CollectionProperty(type=bpy.types.PropertyGroup)
-
-
     bpy.utils.register_class(AssetLinkingPanelObject)
     bpy.utils.register_class(ObjectsLinkOperator)
     bpy.utils.register_class(ObjectsAppendOperator)
@@ -488,19 +467,12 @@ def register():
     bpy.utils.register_class(FilePathOperator)
 
 
-
-
 def unregister():
-    del bpy.types.Scene.my_previews
-    for pcoll in preview_collections.values():
-        bpy.utils.previews.remove(pcoll)
-    preview_collections.clear()
     bpy.utils.unregister_class(AssetLinkingPanelObject)
     bpy.utils.unregister_class(ObjectsLinkOperator)
     bpy.utils.unregister_class(ObjectsAppendOperator)
     bpy.utils.unregister_class(RefreshBlendFilePreview)
     bpy.utils.unregister_class(FilePathOperator)
-    bpy.utils.unregister_class(CustomGroup)
     bpy.utils.unregister_class(FileCollectionsList)
 
 
