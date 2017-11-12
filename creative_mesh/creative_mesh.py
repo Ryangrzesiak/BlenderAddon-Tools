@@ -98,10 +98,10 @@ def uv_texture_project():
     main_image = ""
     main_empty = ""
 
-    bpy.context.space_data.viewport_shade = 'TEXTURED'
+    bpy.context.space_data.viewport_shade = 'MATERIAL'
 
     if bpy.data.images.get("UvTextureProject_Grid") is None:
-        image = bpy.data.images.new("UvTextureProject_Grid", width=512, height=512)
+        image = bpy.data.images.new("UvTextureProject_Grid", width=128, height=128)
         image.generated_type = 'UV_GRID'
         image.use_fake_user = True
 
@@ -135,10 +135,8 @@ def uv_texture_project():
 
     # Add empties to project modifier
     main_empty = bpy.data.objects["E_UvTextureProject_Main"]
-    main_empty.select = True
     bpy.context.scene.objects.active = main_empty
-    bpy.ops.object.select_grouped(type='CHILDREN_RECURSIVE')
-    for index, empty in enumerate(bpy.context.selected_objects):
+    for index, empty in enumerate(main_empty.children):
         project_modifier.projectors[index].object = empty
     bpy.ops.object.select_all(action='DESELECT')
     main_object.select = True

@@ -1,6 +1,7 @@
 import bpy
 import os
 import mathutils
+import math
 from bpy.props import *
 
 from ryan_tools.quick_tools.tool_functions import *
@@ -137,7 +138,8 @@ selection_types = [('0', 'All', '','NONE', 0),
               ('3', 'Lamp', '','OUTLINER_OB_LAMP', 3),
               ('4', 'Curve', '','OUTLINER_OB_CURVE', 4),
               ('5', 'Font', '','OUTLINER_OB_FONT', 5),
-              ('6', 'Camera', '','OUTLINER_OB_CAMERA', 6)]
+              ('6', 'Armature', '','OUTLINER_OB_ARMATURE', 6),
+              ('7', 'Camera', '','OUTLINER_OB_CAMERA', 7)]
 
 bpy.types.Scene.display_type_objects = IntProperty()
 bpy.types.Scene.display_type_value = IntProperty()
@@ -1005,6 +1007,49 @@ def items_action_group(self, context):
     return items
 bpy.types.Scene.action_group = bpy.props.EnumProperty(items=items_action_group, set=set_action_group, name="Action Groups")
 
+class SmoothShadingOperator(bpy.types.Operator):
+    bl_idname = "object.smooth_shading"
+    bl_label = "Smooth"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        selected = bpy.context.selected_objects
+        bpy.ops.object.select_all(action='DESELECT')
+        shading_angle = bpy.context.scene.smooth_shading_angle
+        for obj in selected:
+            obj.select = True
+            bpy.context.scene.objects.active = obj
+            bpy.ops.object.shade_smooth()
+            bpy.context.object.data.use_auto_smooth = True
+            bpy.context.object.data.auto_smooth_angle = shading_angle
+            #if not obj.modifiers.get('EdgeSplit'):
+                #edge_split = obj.modifiers.new('EdgeSplit', 'EDGE_SPLIT')
+                #edge_split.split_angle = 50*math.pi/180
+            obj.select = False
+        for obj in selected:
+            obj.select = True
+        return {"FINISHED"}
+
+bpy.types.Scene.smooth_shading_angle = FloatProperty(default=30.0*math.pi/180, min=0.0, max=180.0, subtype='ANGLE', step=3)
+
+class FlatShadingOperator(bpy.types.Operator):
+    bl_idname = "object.flat_shading"
+    bl_label = "Flat"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        selected = bpy.context.selected_objects
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in selected:
+            obj.select = True
+            bpy.context.scene.objects.active = obj
+            bpy.ops.object.shade_flat()
+            bpy.context.object.data.use_auto_smooth = False
+            obj.select = False
+        for obj in selected:
+            obj.select = True
+        return {"FINISHED"}
+
 
 
 #bpy.types.Scene.coll = bpy.props.CollectionProperty(type=bpy.types.PropertyGroup)
@@ -1090,6 +1135,16 @@ class MainPanelObject(bpy.types.Panel):
         row.operator("object.origin_z_pos", icon="TRIA_DOWN")
         col.operator("object.move_origin", icon="OUTLINER_OB_EMPTY")
 
+        col.separator()
+        col.label(text="Shading")
+        col.operator("object.flat_shading", icon="SMOOTH")
+        split = col.split(percentage=.65, align=True)
+        row = split.row(align=True)
+
+        row.operator("object.smooth_shading", icon="SOLID")
+        row = split.row(align=True)
+        #split = row.split(percentage=0.3)
+        row.prop(bpy.context.scene, "smooth_shading_angle", text="")
 
 
         # Test Modual
@@ -1176,6 +1231,8 @@ def register():
     bpy.utils.register_class(OriginToSelectionOperator)
     bpy.utils.register_class(MoveOriginOperator)
     bpy.utils.register_class(RenameActionsOperator)
+    bpy.utils.register_class(FlatShadingOperator)
+    bpy.utils.register_class(SmoothShadingOperator)
 
 
     #Keymaps
@@ -1212,3 +1269,5 @@ def unregister():
     bpy.utils.unregister_class(OriginToSelectionOperator)
     bpy.utils.unregister_class(MoveOriginOperator)
     bpy.utils.unregister_class(RenameActionsOperator)
+    bpy.utils.unregister_class(FlatShadingOperator)
+    bpy.utils.unregister_class(SmoothShadingOperator)

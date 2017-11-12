@@ -294,13 +294,12 @@ class RefreshBlendFilePreview(bpy.types.Operator):
     bl_label = ""
     bl_options = {"REGISTER"}
 
-    temp_files = CollectionProperty(
-                name="File Path",
-                type=OperatorFileListElement,
-                )
-
     def execute(self, context):
-        file_directories = [{"name": bpy.context.scene.my_previews_dir}, ]
+        file_directories = [{"name": bpy.context.scene.imported_files}, ]
+        file_name = os.path.basename(bpy.context.scene.imported_files)[:-6]
+        global preview_collections
+
+
         bpy.ops.wm.previews_batch_generate(
                 files=file_directories,
                 use_scenes=True,
@@ -308,6 +307,20 @@ class RefreshBlendFilePreview(bpy.types.Operator):
                 use_objects=True,
                 use_intern_data=True,
                 use_backups=False)
+
+        # Check through array
+        file_list = []
+        for files in preview_collections:
+            if files.startswith(file_name):
+                file_list.append(files)
+                print("awesome")
+
+        # Delete items in array
+        # Throws error!!!!
+        #
+        for items in file_list:
+            del preview_collections[items]
+
         return {"FINISHED"}
 
 
@@ -380,6 +393,7 @@ class AssetLinkingPanelObject(bpy.types.Panel):
         row = layout.row(align=True)
         if scene.added_import_file == True:
             row.prop(scene, "imported_files", text="")
+            row.operator("object.refresh_preview", text="", icon="FILE_REFRESH")
             row.operator("object.file_path", text="", icon='FILESEL')
         else:
             row.operator("object.file_path", text="Add File", icon='FILESEL')

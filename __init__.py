@@ -21,11 +21,11 @@ import sys
 from ryan_tools.creative_mesh import (
     creative_mesh,
     )
-
+'''
 from ryan_tools.edit_groups import (
     edit_groups,
     )
-
+'''
 ## Create Material from Textures
 
 from ryan_tools.material_creator import (
