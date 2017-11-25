@@ -132,7 +132,7 @@ class CenterGroupOperator(bpy.types.Operator):
 #-----------------------#
 #--- Selection Types ---#
 #-----------------------#
-selection_types = [('0', 'All', '','NONE', 0),
+selection_types = [('0', ' Select All', '','GRIP', 0),
               ('1', 'Mesh', '','OUTLINER_OB_MESH', 1),
               ('2', 'Empty', '','OUTLINER_OB_EMPTY', 2),
               ('3', 'Lamp', '','OUTLINER_OB_LAMP', 3),
@@ -157,7 +157,7 @@ def select_by_display_type(value):
 
     # Change Selection Type
     for obj in bpy.context.scene.objects:
-        if selection_types[value][1] == 'All':
+        if selection_types[value][1] == ' Select All':
             obj.hide_select = False
         elif obj.type != selection_types[value][1].upper():
             obj.hide_select = True
@@ -189,7 +189,7 @@ def set_display_type(self, value):
 bpy.types.Scene.select_by_type = EnumProperty(
     items=selection_types,
     name="Selection Types",
-    description="This determines which objects are selectable in the veiwport",
+    description="What objects are selectable in the veiwport",
     get=get_display_type,
     set=set_display_type)
 
@@ -199,6 +199,7 @@ bpy.types.Scene.select_by_type = EnumProperty(
 class WireFrameOperator(bpy.types.Operator):
     bl_idname = "object.wireframe"
     bl_label = "Object to Wireframe"
+    bl_description = "Display object as wireframe"
     bl_options = {"REGISTER", "UNDO"}
     def execute(self, context):
         try:
@@ -223,6 +224,7 @@ class WireFrameOperator(bpy.types.Operator):
 class EdgeDisplayOperator(bpy.types.Operator):
     bl_idname = "object.edgedisplay"
     bl_label = "Edge Display"
+    bl_description = "Display all objects with edges"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -260,7 +262,8 @@ def set_edge_display(self, value):
             obj.show_all_edges = False
 
 bpy.types.Scene.edge_display_viewport = BoolProperty(
-    name='',
+    name='Edge Display',
+    description='Display all objects with edges',
     get=get_edge_display,
     set=set_edge_display)
 
@@ -270,53 +273,76 @@ bpy.types.Scene.edge_display_viewport = BoolProperty(
 #--- Align Objects ---#
 #---------------------#
 class AlignObjectsOperator(bpy.types.Operator):
+    bl_description = "Apply Flat Shading to Objects"
     bl_idname = "object.align_objects"
     bl_label = "Align Objects"
+    bl_description = "Align selected objects to active object"
     bl_options = {"REGISTER", "UNDO"}
 
     objects_location = {}
     objects_rotation = {}
     objects_scale = {}
 
-    align_location = True
-    align_rotation = True
-    align_scale = False
+    align_location = align_rotation = True
+    align_scale = align_x = align_y = align_z = False
 
     active_object = ""
     duplicate_objects = []
+    selected_objects = []
+
+    header_x = header_y = header_z = header_scale = 'OFF'
+    header_loc = header_rot = 'ON'
+
+    def header_text(self):
+        bpy.context.area.header_text_set(
+        "Confirm: Enter/LClick, Cancel: (Esc/RClick), "
+        "Constrain Location along Axis (X, Y, Z): (%s), (%s), (%s), "
+        "Use Location (G): (%s), Rotation (R): (%s), Scale (S): (%s)"
+        % (self.header_x, self.header_y, self.header_z, self.header_loc,
+        self.header_rot, self.header_scale))
 
     def modal(self, context, event):
-        context.area.header_text_set("Confirm: Enter/LClick, Cancel: (Esc/RClick), To align using the active object, use Location (G): (ON), Rotation (R): (OFF), Scale (S): (OFF)")
+        # Allow Scene Movement
+        self.header_text()
+        if event.type in {"MIDDLEMOUSE", "WHEELUPMOUSE", "WHEELDOWNMOUSE"}:
+            return {'PASS_THROUGH'}
 
-
-
+        # Use Location
         if event.type == 'G' and event.value == 'PRESS':
             self.align_location = not self.align_location
 
             if self.align_location == False:
+                self.header_loc = 'OFF'
                 for key, value in self.objects_location.items():
-                    bpy.data.objects[key].location = value
+                    bpy.data.objects[key].matrix_world.translation = value
             else:
+                self.header_loc = 'ON'
                 for key, value in self.objects_location.items():
-                    bpy.data.objects[key].location = self.active_object.location
+                    bpy.data.objects[key].matrix_world.translation = self.active_object.matrix_world.to_translation()
 
+        # Use Rotation
         elif event.type == 'R' and event.value == 'PRESS':
             self.align_rotation = not self.align_rotation
 
             if self.align_rotation == False:
+                self.header_rot = 'OFF'
                 for key, value in self.objects_rotation.items():
                     bpy.data.objects[key].rotation_euler = value
             else:
+                self.header_rot = 'ON'
                 for key, value in self.objects_rotation.items():
                     bpy.data.objects[key].rotation_euler = self.active_object.rotation_euler
 
+        # Use Scale
         elif event.type == 'S' and event.value == 'PRESS':
             self.align_scale = not self.align_scale
 
             if self.align_scale == False:
+                self.header_scale = 'OFF'
                 for key, value in self.objects_scale.items():
                     bpy.data.objects[key].scale = value
             else:
+                self.header_scale = 'ON'
                 for key, value in self.objects_scale.items():
                     bpy.data.objects[key].scale = self.active_object.scale
 
@@ -324,28 +350,52 @@ class AlignObjectsOperator(bpy.types.Operator):
         #-------------------------------------------------------
 
         # X: Object snaps to the x position of the active object
-        elif event.type == 'X':
-            active_object = bpy.context.scene.objects.active
+        elif event.type == 'X' and event.value == 'PRESS':
+            if self.align_x != True:
+                self.header_x = 'ON'
+                for key, value in self.objects_location.items():
+                    bpy.data.objects[key].matrix_world.translation = value
+                    bpy.data.objects[key].matrix_world.translation.x = self.active_object.matrix_world.translation.x
+                self.align_x = True
+                self.align_y = self.align_z = False
+            else:
+                self.align_x = self.align_x = self.align_z = False
+                self.header_x = self.header_y = self.header_z = 'OFF'
+                for key, value in self.objects_location.items():
+                    bpy.data.objects[key].matrix_world.translation = self.active_object.matrix_world.translation
 
-            for key, value in self.objects_location.items():
-                bpy.data.objects[key].location = value
-                bpy.data.objects[key].location.x = active_object.location.x
 
         # Y: Object snaps to the y position of the active object
-        elif event.type == 'Y':
-            active_object = bpy.context.scene.objects.active
+        elif event.type == 'Y' and event.value == 'PRESS':
+            if self.align_y != True:
+                self.header_y = 'ON'
+                for key, value in self.objects_location.items():
+                    bpy.data.objects[key].matrix_world.translation = value
+                    bpy.data.objects[key].matrix_world.translation.y = self.active_object.matrix_world.translation.y
+                self.align_y = True
+                self.align_x = self.align_z = False
+            else:
+                self.align_x = self.align_y = self.align_z = False
+                self.header_x = self.header_y = self.header_z = 'OFF'
+                for key, value in self.objects_location.items():
+                    bpy.data.objects[key].matrix_world.translation = self.active_object.matrix_world.translation
 
-            for key, value in self.objects_location.items():
-                bpy.data.objects[key].location = value
-                bpy.data.objects[key].location.y = active_object.location.y
 
         # Z: Object snaps to the z position of the active object
-        elif event.type == 'Z':
-            active_object = bpy.context.scene.objects.active
+        elif event.type == 'Z' and event.value == 'PRESS':
+            if self.align_z != True:
+                self.header_z = 'ON'
+                for key, value in self.objects_location.items():
+                    bpy.data.objects[key].matrix_world.translation = value
+                    bpy.data.objects[key].matrix_world.translation.z = self.active_object.matrix_world.translation.z
+                self.align_z = True
+                self.align_x = self.align_y = False
+            else:
+                self.align_x = self.align_x = self.align_z = False
+                self.header_x = self.header_y = self.header_z = 'OFF'
+                for key, value in self.objects_location.items():
+                    bpy.data.objects[key].matrix_world.translation = self.active_object.matrix_world.translation
 
-            for key, value in self.objects_location.items():
-                bpy.data.objects[key].location = value
-                bpy.data.objects[key].location.z = active_object.location.z
 
 
 
@@ -353,6 +403,11 @@ class AlignObjectsOperator(bpy.types.Operator):
         elif event.type == 'LEFTMOUSE':
             for obj in self.duplicate_objects:
                 bpy.data.objects.remove(bpy.data.objects[obj], True)
+            for obj in self.selected_objects:
+                if obj != self.active_object:
+                    obj.draw_type = "TEXTURED"
+                    obj.show_x_ray = False
+                    obj.show_wire = False
             context.area.header_text_set()
             bpy.context.screen.scene = bpy.context.screen.scene
             return {'FINISHED'}
@@ -362,9 +417,14 @@ class AlignObjectsOperator(bpy.types.Operator):
             for obj in self.duplicate_objects:
                 bpy.data.objects.remove(bpy.data.objects[obj], True)
             for key, value in self.objects_location.items():
-                bpy.data.objects[key].location = value
+                bpy.data.objects[key].matrix_world.translation = value
             for key, value in self.objects_rotation.items():
                 bpy.data.objects[key].rotation_euler = value
+            for obj in self.selected_objects:
+                if obj != self.active_object:
+                    obj.draw_type = "TEXTURED"
+                    obj.show_x_ray = False
+                    obj.show_wire = False
             context.area.header_text_set()
             bpy.context.screen.scene = bpy.context.screen.scene
             return {'CANCELLED'}
@@ -372,11 +432,12 @@ class AlignObjectsOperator(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def invoke(self, context, event):
-        print("invoke")
         if context.object:
-            selected_objects = context.selected_objects
+            self.header_text()
+            self.selected_objects = context.selected_objects
             self.active_object = bpy.context.scene.objects.active
-            pos = self.active_object.location
+            self.active_object.select = False
+            pos = self.active_object.matrix_world.translation
             rot = self.active_object.rotation_euler
 
             # Saves object's transform to List
@@ -384,28 +445,34 @@ class AlignObjectsOperator(bpy.types.Operator):
             self.objects_rotation = {}
             self.objects_scale = {}
             self.duplicate_objects = []
-            for obj in selected_objects:
-                self.objects_location[obj.name] = list(obj.location)
+
+            for obj in self.selected_objects:
+                self.objects_location[obj.name] = list(obj.matrix_world.translation)
                 self.objects_rotation[obj.name] = list(obj.rotation_euler)
                 self.objects_scale[obj.name] = list(obj.scale)
+                # Original Objects
+                if obj != self.active_object:
+                    pass
+                    #obj.show_wire = True
 
             # Duplicating Objects
-            for obj in selected_objects:
+            for obj in self.selected_objects:
                 new_obj = obj.copy()
                 bpy.context.scene.objects.link(new_obj)
+                # New Objects
                 if obj != self.active_object:
-                    new_obj.draw_type = "WIRE"
-                    new_obj.show_x_ray = True
+                    obj.draw_type = "WIRE"
+                    obj.show_x_ray = True
                 self.duplicate_objects.append(new_obj.name)
 
-            print(self.duplicate_objects)
+
             # Align Position and Rotation
-            if len(selected_objects) == 1:
-                selected_objects[0].location = bpy.context.scene.cursor_location
+            if len(self.selected_objects) == 1:
+                self.selected_objects[0].matrix_world.translation = bpy.context.scene.cursor_location
                 return {'FINISHED'}
             else:
-                for obj in selected_objects:
-                    obj.location = pos
+                for obj in self.selected_objects:
+                    obj.matrix_world.translation = pos
                     obj.rotation_euler = rot
 
             context.window_manager.modal_handler_add(self)
@@ -418,11 +485,17 @@ class AlignObjectsOperator(bpy.types.Operator):
 #-------------------------#
 #--- UV Unwrap Objects ---#
 #-------------------------#
-bpy.types.Scene.uv_unwrap_angle = FloatProperty(default=60.0, min=0.0, max=90.0, step=3)
+bpy.types.Scene.uv_unwrap_angle = FloatProperty(
+                                  description='Unwrap angle limit',
+                                  default=60.0,
+                                  min=0.0,
+                                  max=90.0,
+                                  step=3)
 
 class UVUnwrapAllOperator(bpy.types.Operator):
     bl_idname = "object.uv_unwrap_all"
     bl_label = "Unwrap All"
+    bl_description = "Smart UV project all selected objects with given angle"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -451,13 +524,13 @@ class UVUnwrapAllOperator(bpy.types.Operator):
 class ExportUVLayoutOperator(bpy.types.Operator):
     bl_idname = "object.export_uv_layout"
     bl_label = "Export UV"
+    bl_description = "Export UV layout to PNG"
     bl_options = {"REGISTER"}
 
     def execute(self, context):
         basedir = os.path.dirname(bpy.data.filepath)
         name = bpy.path.clean_name(bpy.context.scene.objects.active.name)
         uv_filepath = os.path.join(basedir, name + "_uv.png")
-        print(uv_filepath)
         bpy.ops.uv.export_layout(filepath=uv_filepath, check_existing=False, \
                                  export_all=True, modified=False, \
                                  mode='PNG', size=(2048, 2048), opacity=0.0)
@@ -471,6 +544,7 @@ bpy.types.Scene.blendersavelocation = StringProperty(subtype='FILE_PATH')
 class SaveBackupOperator(bpy.types.Operator):
     bl_idname = "object.savebackup"
     bl_label = ""
+    bl_description = "Copy file to a local backup folder in the saved blender file's location"
     bl_options = {"REGISTER"}
     def execute(self, context):
         # Location Names
@@ -507,6 +581,7 @@ class SaveBackupOperator(bpy.types.Operator):
 class SaveNormalOperator(bpy.types.Operator):
     bl_idname = "object.save_normal"
     bl_label = "Save Blender File"
+    bl_description = "Quick save blender file"
     bl_options = {"REGISTER"}
 
     files = bpy.props.CollectionProperty(
@@ -545,6 +620,7 @@ class SaveNormalOperator(bpy.types.Operator):
 class OverrideDeleteOperator(bpy.types.Operator):
     bl_idname = "object.overridedelete"
     bl_label = "Delete"
+    bl_description = "Quick delete object"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -570,11 +646,13 @@ class AutoKeyFrameOperator(bpy.types.Operator):
 class OriginToZPosOperator(bpy.types.Operator):
     bl_idname = "object.origin_z_pos"
     bl_label = ""
+    bl_description = "Align the origin of selected objects to the bottom of the mesh"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
         selected = bpy.context.selected_objects
         bpy.ops.object.select_all(action='DESELECT')
+        active_obj = context.scene.objects.active
 
         for mesh_obj in selected:
             mesh_obj.select = True
@@ -585,13 +663,14 @@ class OriginToZPosOperator(bpy.types.Operator):
                 if v_world[2] < minz:
                     minz = v_world[2]
 
-            obj_pos = mathutils.Vector(mesh_obj.location)
+            obj_pos = mathutils.Vector(mesh_obj.matrix_world.translation)
             obj_pos.z = obj_pos.z - (obj_pos.z - minz)
             bpy.context.scene.cursor_location = obj_pos
             bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
-            mesh_obj.select = False
+            bpy.ops.object.select_all(action='DESELECT')
 
         # Reset Operations
+        context.scene.objects.active = active_obj
         bpy.ops.view3d.snap_cursor_to_center()
         for obj in selected:
             obj.select = True
@@ -600,6 +679,7 @@ class OriginToZPosOperator(bpy.types.Operator):
 class OriginToCenterOperator(bpy.types.Operator):
     bl_idname = "object.origin_to_center"
     bl_label = "Center"
+    bl_description = "Align the origin of selected objects to the center of the mesh"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -609,15 +689,15 @@ class OriginToCenterOperator(bpy.types.Operator):
 class OriginToSelectionOperator(bpy.types.Operator):
     bl_idname = "object.origin_selection"
     bl_label = ""
+    bl_description = "Align the origin of selected objects to active object's origin"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
         selected_obj = bpy.context.selected_objects
         active_obj = context.scene.objects.active
         cursor_loc = list(bpy.context.scene.cursor_location)
-        print(cursor_loc)
 
-        bpy.context.scene.cursor_location = active_obj.location
+        bpy.context.scene.cursor_location = active_obj.matrix_world.translation
         bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
 
         bpy.context.scene.cursor_location = cursor_loc
@@ -628,18 +708,17 @@ class OriginToSelectionOperator(bpy.types.Operator):
 #--- Origin Manipulation
 class MoveOriginOperator(bpy.types.Operator):
     bl_idname = "object.move_origin"
-    bl_label = "Widget Tool"
+    bl_label = "Origin Move"
+    bl_description = "Manipulate the objects origin using location and rotation"
     bl_options = {"REGISTER", "UNDO"}
 
     empty_obj = ""
     active_obj = ""
     origin_location = []
+    location = False
+    rotation = False
 
     def modal(self, context, event):
-        if event.type in {'G'}:
-            pass
-        else:
-            context.area.header_text_set("Confirm: Enter/LClick, Cancel: (Esc/RClick), To align using the active object, use Location (G): (ON), Rotation (R): (OFF), Scale (S): (OFF)")
 
         #bpy.ops.view3d.snap_cursor_to_selected()
         scene = context.scene
@@ -648,9 +727,7 @@ class MoveOriginOperator(bpy.types.Operator):
         #_timer = None
 
         if event.type == 'TIMER':
-            #print(self._timer)
-
-            bpy.context.scene.cursor_location = self.empty_obj.location
+            bpy.context.scene.cursor_location = self.empty_obj.matrix_world.translation
             bpy.ops.object.select_all(action='DESELECT')
             self.active_obj.select = True
             bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
@@ -658,15 +735,27 @@ class MoveOriginOperator(bpy.types.Operator):
             self.empty_obj.select = True
             context.scene.objects.active = self.empty_obj
 
-        # FINISHED: Confirm Operation
-        #if event.type == 'G':
-            #bpy.ops.view3d.snap_cursor_to_selected()
-            #context.scene.objects.active = active_obj
-            #bpy.ops.transform.translate('INVOKE_DEFAULT')
+            if self.location == True:
+                context.area.header_text_set("Confirm: Tab\Enter, Cancel: (Esc), To move or rotate the pivot point, use Location (G): (ON), Rotation (R): (OFF)")
+            elif self.rotation == True:
+                context.area.header_text_set("Confirm: Tab\Enter, Cancel: (Esc), To move or rotate the pivot point, use Location (G): (OFF), Rotation (R): (ON)")
+            else:
+                context.area.header_text_set("Confirm: Tab\Enter, Cancel: (Esc), To move or rotate the pivot point, use Location (G): (OFF), Rotation (R): (OFF)")
+
+
+        # Location
+        if event.type == 'G':
+            self.location = True
+        # Rotation
+        elif event.type == 'R':
+            self.rotation = True
+        if event.type in {'LEFTMOUSE', 'RIGHTMOUSE'}:
+            self.location = False
+            self.rotation = False
+
 
         # CANCELLED: Return Objects to original position
-        elif event.type in {'ESC', 'ENTER'}:
-            #self.active_obj.location = origin_location
+        if event.type in {'TAB', 'ENTER'}:
             self.active_obj.select = True
             context.scene.objects.active = self.active_obj
             bpy.data.objects.remove(self.empty_obj, True)
@@ -680,10 +769,12 @@ class MoveOriginOperator(bpy.types.Operator):
 
     def invoke(self, context, event):
         if context.object:
+            context.area.header_text_set("Confirm: Tab\Enter, Cancel: (Esc), To move or rotate the pivot point, use Location (G): (OFF), Rotation (R): (OFF)")
+
             self.active_obj = context.scene.objects.active
             empty = bpy.data.objects.new("E_OriginMove", None)
             bpy.context.scene.objects.link(empty)
-            empty.location = self.active_obj.location
+            empty.location = self.active_obj.matrix_world.translation
             empty.empty_draw_size = 3
             empty.empty_draw_type = "ARROWS"
             empty.show_x_ray = True
@@ -732,7 +823,6 @@ def set_obj_name(self, value):
         for obj in bpy.context.selected_objects:
             if value[:-1].isdigit():
                 subtract = int(value[:-1])
-                print(subtract)
                 obj.name = obj.name[subtract:]
 
     else:
@@ -864,6 +954,7 @@ bpy.types.Scene.zscale = FloatProperty(default=1.0, get=get_z_offset, set=set_z_
 class RenameActionsOperator(bpy.types.Operator):
     bl_idname = "object.rename_actions"
     bl_label = ""
+    bl_description = "Rename Actions"
     bl_options = {"REGISTER"}
     def execute(self, context):
         action_tracks = bpy.context.object.animation_data.nla_tracks
@@ -1010,42 +1101,52 @@ bpy.types.Scene.action_group = bpy.props.EnumProperty(items=items_action_group, 
 class SmoothShadingOperator(bpy.types.Operator):
     bl_idname = "object.smooth_shading"
     bl_label = "Smooth"
+    bl_description = "Apply smooth shading to selected objects"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
         selected = bpy.context.selected_objects
         bpy.ops.object.select_all(action='DESELECT')
-        shading_angle = bpy.context.scene.smooth_shading_angle
+        shading_angle = bpy.context.scene.smooth_shading_angle*math.pi/180
         for obj in selected:
-            obj.select = True
-            bpy.context.scene.objects.active = obj
-            bpy.ops.object.shade_smooth()
-            bpy.context.object.data.use_auto_smooth = True
-            bpy.context.object.data.auto_smooth_angle = shading_angle
-            #if not obj.modifiers.get('EdgeSplit'):
-                #edge_split = obj.modifiers.new('EdgeSplit', 'EDGE_SPLIT')
-                #edge_split.split_angle = 50*math.pi/180
-            obj.select = False
+            if obj.type == 'MESH':
+                obj.select = True
+                bpy.context.scene.objects.active = obj
+                bpy.ops.object.shade_smooth()
+                bpy.context.object.data.use_auto_smooth = True
+                bpy.context.object.data.auto_smooth_angle = shading_angle
+                #if not obj.modifiers.get('EdgeSplit'):
+                    #edge_split = obj.modifiers.new('EdgeSplit', 'EDGE_SPLIT')
+                    #edge_split.split_angle = 50*math.pi/180
+                obj.select = False
         for obj in selected:
             obj.select = True
         return {"FINISHED"}
 
-bpy.types.Scene.smooth_shading_angle = FloatProperty(default=30.0*math.pi/180, min=0.0, max=180.0, subtype='ANGLE', step=3)
+bpy.types.Scene.smooth_shading_angle = FloatProperty(
+                                       description='Smooth shading angle',
+                                       default=30,
+                                       min=0.0,
+                                       max=180.0,
+                                       precision=1,
+                                       step=3)
 
 class FlatShadingOperator(bpy.types.Operator):
     bl_idname = "object.flat_shading"
-    bl_label = "Flat"
+    bl_label = "Flat Shading"
+    bl_description = "Apply flat shading to selected objects"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
         selected = bpy.context.selected_objects
         bpy.ops.object.select_all(action='DESELECT')
         for obj in selected:
-            obj.select = True
-            bpy.context.scene.objects.active = obj
-            bpy.ops.object.shade_flat()
-            bpy.context.object.data.use_auto_smooth = False
-            obj.select = False
+            if obj.type == 'MESH':
+                obj.select = True
+                bpy.context.scene.objects.active = obj
+                bpy.ops.object.shade_flat()
+                bpy.context.object.data.use_auto_smooth = False
+                obj.select = False
         for obj in selected:
             obj.select = True
         return {"FINISHED"}
@@ -1053,6 +1154,111 @@ class FlatShadingOperator(bpy.types.Operator):
 
 
 #bpy.types.Scene.coll = bpy.props.CollectionProperty(type=bpy.types.PropertyGroup)
+
+###
+### Selection Sets - Add Sets
+###
+def delete_selection_set(set_name):
+    for idx, temp_set in enumerate(bpy.context.scene.set_list):
+        if temp_set.name == set_name:
+            bpy.context.scene.set_list.remove(idx)
+
+class SelectionSetItem(bpy.types.PropertyGroup):
+    set_obj = PointerProperty(name="Object", type=bpy.types.Object)
+    set_active = PointerProperty(name="Object", type=bpy.types.Object)
+bpy.utils.register_class(SelectionSetItem)
+
+class SelectionSetList(bpy.types.PropertyGroup):
+    set_item = CollectionProperty(type=SelectionSetItem)
+bpy.utils.register_class(SelectionSetList)
+
+bpy.types.Scene.set_obj = CollectionProperty(type=SelectionSetItem)
+bpy.types.Scene.set_list = CollectionProperty(type=SelectionSetList)
+
+# Selection Sets - Display Name
+def get_selection_set(self):
+    for temp_list in bpy.context.scene.set_list:
+        obj_list = []
+        for temp_item in temp_list.set_item:
+            obj_list.append(temp_item.set_obj)
+
+        if obj_list == bpy.context.selected_objects:
+            return temp_list.name
+    return ""
+
+# Selection Sets - Add Set to Library
+def set_selection_set(self, value):
+    if value != "":
+        # Check if set with same name exists and delete
+        if value in bpy.context.scene.set_list:
+            delete_selection_set(value)
+
+        # Check if selection is the same
+        for temp_list in bpy.context.scene.set_list:
+            obj_list = []
+            for temp_item in temp_list.set_item:
+                obj_list.append(temp_item.set_obj)
+            if obj_list == bpy.context.selected_objects:
+                delete_selection_set(temp_list.name)
+
+        # Add Selection Set
+        bpy.context.scene.set_list.add().name = value
+        for obj in bpy.context.selected_objects:
+            new_object = bpy.context.scene.set_list[value].set_item.add()
+            new_object.set_obj = obj
+            new_object.set_active =  bpy.context.scene.objects.active
+
+
+
+bpy.types.Scene.selection_set = StringProperty(name="Selection Set Name",
+                                               description='Add selected objects to selection set',
+                                               get=get_selection_set,
+                                               set=set_selection_set)
+
+
+
+# Selection Sets - Display Sets in Dropdown List
+set_library = []
+def set_library(self, context):
+    global set_library
+    set_library = []
+
+    for idx, set_name in enumerate(bpy.context.scene.set_list):
+        set_library.append((set_name.name, set_name.name, "", idx))
+
+    return set_library
+
+
+# Selection Sets - Select objects in scene
+def set_library_objects(self, value):
+    global set_library
+
+    for set_name in set_library:
+        if set_name[3] == value:
+            bpy.ops.object.select_all(action='DESELECT')
+            for temp_list in bpy.context.scene.set_list[set_name[0]].set_item:
+                if temp_list.set_obj is not None:
+                    temp_list.set_obj.select = True
+                if temp_list.set_active is not None:
+                    bpy.context.scene.objects.active = temp_list.set_active
+
+bpy.types.Scene.selection_set_library = EnumProperty(name="Selection Sets",
+                                        description='List of selection sets',
+                                        items=set_library,
+                                        set=set_library_objects)
+
+
+class DeleteSelectionSetOperator(bpy.types.Operator):
+    bl_idname = "object.delete_selection_set"
+    bl_label = "Delete"
+    bl_description = "Delete Selection Set"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        if bpy.context.scene.selection_set is not "":
+            delete_selection_set(bpy.context.scene.selection_set)
+        return {"FINISHED"}
+
 
 #-----------------------#
 #--- SubLayout Panel ---#
@@ -1086,122 +1292,78 @@ class MainPanelObject(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "TOOLS"
     bl_context = "objectmode"
-    bl_label = "Main Tools"
+    bl_label = "Ultimate Toolbox"
 
     def draw(self, context):
         layout = self.layout
         scene = context.scene
 
-        # Wireframe Views
+        # Slection Sets
         col = layout.column(align=True)
+        #col.separator()
+        #col.label("Selection Sets")
         row = col.row(align=True)
-        row.prop(bpy.context.scene, "edge_display_viewport", text="", icon="MESH_GRID", toggle=True)
-        row.operator("object.align_objects", text="Align")
-        row.operator("object.wireframe", text="", icon="LATTICE_DATA")
+        row.prop(bpy.context.scene, "selection_set_library", text="", icon="COLLAPSEMENU", icon_only=True)
+        row.prop(bpy.context.scene, "selection_set", text="")
+        row.operator("object.delete_selection_set", text="", icon="X")
 
-        # Selection Types
+        col.separator()
+        col.separator()
+
+        # Wireframe Views
+        box = layout.box()
+        col = box.column(align=True)
+        col.label("Scene", icon="SCENE_DATA")
+        col.separator()
         col.prop(bpy.context.scene, "select_by_type", text="")
-        col.separator()
-        col.separator()
-        col.separator()
-
-        col = layout.column(align=True)
-        col.label(text="Rename", icon='OBJECT_DATA')
-        row = col.row()
-        row.prop(bpy.context.scene, "object_names", text="")
-        col = layout.column(align=True)
+        row = col.row(align=True)
+        row.prop(bpy.context.scene, "edge_display_viewport", text="Edges", icon="MESH_GRID", toggle=True)
+        row.operator("object.wireframe", text="Wire", icon="LATTICE_DATA")
+        #col.operator("object.align_objects", text="Quick Align")
         col.separator()
 
+
+        col = layout.column(align=True)
+        col.separator()
 
 
 
         # Uv Operations
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="UV Tasks")
-        row = col.row(align=True)
-
-        row.operator("object.uv_unwrap_all", text="Unwrap")
-        row.prop(bpy.context.scene, "uv_unwrap_angle", text="")
-
-        # Origin Manipulation
-        #box = layout.box()
-        col = box.column(align=True)
-        col.label(text="Origin Tools")
-        row = box.row(align=True)
-        row = col.row(align=True)
-        row.operator("object.origin_to_center", icon="LAYER_ACTIVE")
-        row.operator("object.origin_selection", text="", icon="TRIA_RIGHT_BAR")
-        row.operator("object.origin_z_pos", icon="TRIA_DOWN")
-        col.operator("object.move_origin", icon="OUTLINER_OB_EMPTY")
-
+        col.label(text="Object", icon="OBJECT_DATA")
+        #col.separator()
         col.separator()
-        col.label(text="Shading")
-        col.operator("object.flat_shading", icon="SMOOTH")
         split = col.split(percentage=.65, align=True)
         row = split.row(align=True)
+        row.operator("object.uv_unwrap_all", text="Quick Unwrap")
+        row = split.row(align=True)
+        row.prop(bpy.context.scene, "uv_unwrap_angle", text="")
+        col.separator()
+        col.separator()
 
+        # Origin Operations
+        col = box.column(align=True)
+        row = box.row(align=True)
+        #col.label('Pivot Point')
+        col.operator("object.move_origin", icon="OUTLINER_OB_EMPTY")
+        row = col.row(align=True)
+        row.operator("object.origin_to_center", icon="LAYER_ACTIVE")
+        row.operator("object.origin_selection", text="", icon="STICKY_UVS_DISABLE")
+        row.operator("object.origin_z_pos", icon="TRIA_DOWN")
+        col.separator()
+        col.separator()
+        col.separator()
+
+        # Shading Operations
+        #col.label('Shading')
+        col.operator("object.flat_shading", icon="SMOOTH")
+        split = col.split(percentage=.6, align=True)
+        row = split.row(align=True)
         row.operator("object.smooth_shading", icon="SOLID")
         row = split.row(align=True)
-        #split = row.split(percentage=0.3)
         row.prop(bpy.context.scene, "smooth_shading_angle", text="")
 
-
-        # Test Modual
-        #col = layout.column(align=True)
-        #col.operator("object.origin_to_center", icon="LAYER_ACTIVE")
-
-        #col.separator()
-        #col.label(text="Bone Offset Amount")
-        #col.prop(bpy.context.scene, "xscale", text="X")
-        #col.prop(bpy.context.scene, "yscale", text="Y")
-        #col.prop(bpy.context.scene, "zscale", text="Z")
-
-        '''
-        #Shortcut Keys
-        box = layout.box()
-        row = box.row(align=True)
-        #row.operator("object.edgedisplay", icon="MESH_GRID", emboss=False if False else True)
-        row.prop(bpy.context.scene, "edge_display_viewport", icon="MESH_GRID", toggle=True)
-        row.operator("object.align_objects", text="Align")
-        row.operator("object.wireframe", icon="LATTICE_DATA")
-        col = box.column(align=True)
-        col.label(text="Drivers")
-        #col.operator("object.create_drivers", icon="LINKED")
-
-        space = layout.column(align=True)
-        space.separator()
-
-        # Object Rename
-        box = layout.box()
-        col = box.column(align=True)
-        col.label(text="Object Settings 2", icon="OBJECT_DATAMODE")
-        col.separator()
-        col.prop(bpy.context.scene, "objectnames", text="")
-        row = box.row(align=True)
-        row.operator("object.origin_to_center", icon="LAYER_ACTIVE")
-        ###row.operator("object.origin_z_pos", icon="MOVE_DOWN_VEC")
-
-        space = layout.column(align=True)
-        space.separator()
-        '''
-        # Selection Types
-        #box = layout.box()
-        # Selection Sets
-
-
-
-        # Extra Features
-        #box = layout.box()
-        #col = box.column(align=True)
-        #col.label(text="Extra Features:", icon="SCENE_DATA")
-        #col.separator()
-        #col.operator("object.smoothsurface")
-        #col.operator("object.uvunwrapall", text="Smart UV", icon="IMAGE_RGB")
-        #col.operator("object.centergroup", text="Center Group", icon="IMAGE_RGB")
-
-#col = box.column(align=True)
-#col.operator("object.export_uv_layout", text="Export UV's", icon="IMAGE_DATA")
 
 #------------------------#
 #--- Register Modules ---#
@@ -1233,6 +1395,7 @@ def register():
     bpy.utils.register_class(RenameActionsOperator)
     bpy.utils.register_class(FlatShadingOperator)
     bpy.utils.register_class(SmoothShadingOperator)
+    bpy.utils.register_class(DeleteSelectionSetOperator)
 
 
     #Keymaps
@@ -1271,3 +1434,4 @@ def unregister():
     bpy.utils.unregister_class(RenameActionsOperator)
     bpy.utils.unregister_class(FlatShadingOperator)
     bpy.utils.unregister_class(SmoothShadingOperator)
+    bpy.utils.unregister_class(DeleteSelectionSetOperator)
