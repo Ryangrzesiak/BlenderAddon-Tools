@@ -51,10 +51,11 @@ from ryan_tools.fbx_export import (
 
 
 ## Tools for quick use
+'''
 from ryan_tools.quick_tools import (
     tool_panel,
     )
-
+'''
 # Register the Addon
 def _call_globals(attr_name):
     for m in globals().values():

@@ -2,6 +2,7 @@ import bpy
 import os
 import mathutils
 import math
+import bmesh
 from bpy.props import *
 
 from ryan_tools.quick_tools.tool_functions import *
@@ -410,6 +411,8 @@ class AlignObjectsOperator(bpy.types.Operator):
                     obj.show_wire = False
             context.area.header_text_set()
             bpy.context.screen.scene = bpy.context.screen.scene
+            global is_quick_align
+            is_quick_align = False
             return {'FINISHED'}
 
         # CANCELLED: Return Objects to original position
@@ -427,12 +430,16 @@ class AlignObjectsOperator(bpy.types.Operator):
                     obj.show_wire = False
             context.area.header_text_set()
             bpy.context.screen.scene = bpy.context.screen.scene
+            global is_quick_align
+            is_quick_align = False
             return {'CANCELLED'}
 
         return {'RUNNING_MODAL'}
 
     def invoke(self, context, event):
         if context.object:
+            global is_quick_align
+            is_quick_align = True
             self.header_text()
             self.selected_objects = context.selected_objects
             self.active_object = bpy.context.scene.objects.active
@@ -466,14 +473,26 @@ class AlignObjectsOperator(bpy.types.Operator):
                 self.duplicate_objects.append(new_obj.name)
 
 
-            # Align Position and Rotation
+            # If selection only has one object
             if len(self.selected_objects) == 1:
                 self.selected_objects[0].matrix_world.translation = bpy.context.scene.cursor_location
-                return {'FINISHED'}
-            else:
+                for obj in self.duplicate_objects:
+                    bpy.data.objects.remove(bpy.data.objects[obj], True)
                 for obj in self.selected_objects:
-                    obj.matrix_world.translation = pos
-                    obj.rotation_euler = rot
+                    if obj != self.active_object:
+                        obj.draw_type = "TEXTURED"
+                        obj.show_x_ray = False
+                        obj.show_wire = False
+                context.area.header_text_set()
+                bpy.context.screen.scene = bpy.context.screen.scene
+                self.selected_objects[0].select = True
+                global is_quick_align
+                is_quick_align = False
+                return {'FINISHED'}
+
+            for obj in self.selected_objects:
+                obj.matrix_world.translation = pos
+                obj.rotation_euler = rot
 
             context.window_manager.modal_handler_add(self)
             return {'RUNNING_MODAL'}
@@ -704,6 +723,9 @@ class OriginToSelectionOperator(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def origin_display_message():
+    context.area.header_text_set("Confirm: Spacebar\Enter, Cancel: (Esc), To move or rotate the pivot point, use Location (G): (OFF), Rotation (R): (OFF)")
+
 
 #--- Origin Manipulation
 class MoveOriginOperator(bpy.types.Operator):
@@ -715,63 +737,162 @@ class MoveOriginOperator(bpy.types.Operator):
     empty_obj = ""
     active_obj = ""
     origin_location = []
+    cursor_location = ""
     location = False
     rotation = False
 
-    def modal(self, context, event):
+    header_loc = 'OFF'
+    header_rot = 'OFF'
 
-        #bpy.ops.view3d.snap_cursor_to_selected()
+    def header_text(self):
+        bpy.context.area.header_text_set(
+        "Confirm: Tab\Enter, Cancel: (Esc), "
+        "To move or rotate the pivot point, "
+        "use Location (G): (%s), Rotation (R): (%s)"
+        % (self.header_loc, self.header_rot))
+
+    def modal(self, context, event):
         scene = context.scene
         obj = context.object
         wm = context.window_manager
-        #_timer = None
 
-        if event.type == 'TIMER':
+        # Allow Mouse Movement
+        self.header_text()
+        if event.type in {"MIDDLEMOUSE", "WHEELUPMOUSE", "WHEELDOWNMOUSE", 'LEFT_SHIFT', 'Q'}:
+            return {'PASS_THROUGH'}
+
+        #if event.type == 'TIMER':
+            #bpy.context.scene.cursor_location = self.empty_obj.matrix_world.translation
+            #bpy.ops.object.select_all(action='DESELECT')
+            #self.active_obj.select = True
+            #bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+            #self.active_obj.select = False
+            #self.empty_obj.select = True
+            #context.scene.objects.active = self.empty_obj
+
+
+
+        # Location
+        if event.type == 'G' and event.value == 'PRESS':
+            self.location = True
+            return {'PASS_THROUGH'}
+
+        # Rotation
+        if event.type == 'R' and event.value == 'PRESS':
+            self.rotation = True
+            return {'PASS_THROUGH'}
+
+        # Header Text
+        if self.location == True:
+            self.header_loc = 'ON'
+        elif self.rotation  == True:
+            self.header_rot = 'ON'
+        else:
+            self.header_loc = 'OFF'
+            self.header_rot = 'OFF'
+
+
+        # Clear Movement
+        if event.type in {'LEFTMOUSE', 'RIGHTMOUSE'}:
+            self.location = False
+            self.rotation = False
+            return {'PASS_THROUGH'}
+
+
+        # FINISHED: Move Objects to desired position
+        if event.type in {'SPACE', 'RET'}:
+            # Set Origin to the cursor
             bpy.context.scene.cursor_location = self.empty_obj.matrix_world.translation
             bpy.ops.object.select_all(action='DESELECT')
             self.active_obj.select = True
             bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
-            self.active_obj.select = False
-            self.empty_obj.select = True
-            context.scene.objects.active = self.empty_obj
 
-            if self.location == True:
-                context.area.header_text_set("Confirm: Tab\Enter, Cancel: (Esc), To move or rotate the pivot point, use Location (G): (ON), Rotation (R): (OFF)")
-            elif self.rotation == True:
-                context.area.header_text_set("Confirm: Tab\Enter, Cancel: (Esc), To move or rotate the pivot point, use Location (G): (OFF), Rotation (R): (ON)")
+            context.scene.objects.active = self.active_obj
+
+            if self.active_obj.data.users > 1:
+                mesh_name = self.active_obj.data.name
+                bpy.ops.object.make_single_user(object=False, obdata=True, material=False, texture=False, animation=False)
+                bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
+                new_mesh_name = self.active_obj.data.name
+
+                for obj in bpy.data.objects:
+                    try:
+                        if obj.data.name == mesh_name:
+                            obj.data = bpy.data.meshes[new_mesh_name]
+                    except:
+                        pass
             else:
-                context.area.header_text_set("Confirm: Tab\Enter, Cancel: (Esc), To move or rotate the pivot point, use Location (G): (OFF), Rotation (R): (OFF)")
+                bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
+
+            # Rotate object
+            empty_rot_x = self.empty_obj.rotation_euler.x
+            empty_rot_y = self.empty_obj.rotation_euler.y
+            empty_rot_z = self.empty_obj.rotation_euler.z
+            self.active_obj.rotation_euler.x += self.empty_obj.rotation_euler.x
+            self.active_obj.rotation_euler.y += self.empty_obj.rotation_euler.y
+            self.active_obj.rotation_euler.z += self.empty_obj.rotation_euler.z
 
 
-        # Location
-        if event.type == 'G':
-            self.location = True
-        # Rotation
-        elif event.type == 'R':
-            self.rotation = True
-        if event.type in {'LEFTMOUSE', 'RIGHTMOUSE'}:
-            self.location = False
-            self.rotation = False
+            bpy.ops.object.editmode_toggle()
+            bpy.ops.mesh.select_all(action='SELECT')
+
+            obj = self.active_obj
+            bm = bmesh.from_edit_mesh(obj.data)
+            face = bm.faces
+            center = bpy.context.scene.cursor_location
+            invert2 = mathutils.Euler((empty_rot_x, empty_rot_y, empty_rot_z), 'XYZ').to_matrix()
+
+            bmesh.ops.rotate(
+                        bm,
+                        cent=bpy.context.scene.cursor_location,
+                        matrix=invert2.inverted(),
+                        verts=bm.verts,
+                        space=self.empty_obj.matrix_world
+                        )
+            ''''''
+            bpy.ops.object.editmode_toggle()
 
 
-        # CANCELLED: Return Objects to original position
-        if event.type in {'TAB', 'ENTER'}:
+            # Reselect obj
             self.active_obj.select = True
             context.scene.objects.active = self.active_obj
             bpy.data.objects.remove(self.empty_obj, True)
+
+            # Window manager
+            global is_move_origin
+            is_move_origin = False
+            context.area.header_text_set()
+            bpy.context.screen.scene = bpy.context.screen.scene
+            wm = context.window_manager
+            wm.event_timer_remove(self._timer)
+            return {'FINISHED'}
+
+        # CANCELLED: Return Objects to original position
+        if event.type in {'ESC'}:
+            # Reselect obj
+            global is_move_origin
+            is_move_origin = False
+            self.active_obj.select = True
+            context.scene.objects.active = self.active_obj
+            bpy.data.objects.remove(self.empty_obj, True)
+
+            # Window manager
             context.area.header_text_set()
             bpy.context.screen.scene = bpy.context.screen.scene
             wm = context.window_manager
             wm.event_timer_remove(self._timer)
             return {'CANCELLED'}
 
-        return {'PASS_THROUGH'}
+        return {'RUNNING_MODAL'}
 
     def invoke(self, context, event):
         if context.object:
-            context.area.header_text_set("Confirm: Tab\Enter, Cancel: (Esc), To move or rotate the pivot point, use Location (G): (OFF), Rotation (R): (OFF)")
-
+            global is_move_origin
+            is_move_origin = True
             self.active_obj = context.scene.objects.active
+            self.cursor_location = bpy.context.scene.cursor_location
+
+            # Create Emtpy for the origin point
             empty = bpy.data.objects.new("E_OriginMove", None)
             bpy.context.scene.objects.link(empty)
             empty.location = self.active_obj.matrix_world.translation
@@ -779,12 +900,13 @@ class MoveOriginOperator(bpy.types.Operator):
             empty.empty_draw_type = "ARROWS"
             empty.show_x_ray = True
             self.empty_obj = empty
+            self.empty_obj.rotation_euler = self.active_obj.rotation_euler
 
             bpy.ops.object.select_all(action='DESELECT')
             empty.select = True
             context.scene.objects.active = self.active_obj
 
-
+            # Set up window manager
             wm = context.window_manager
             self._timer = wm.event_timer_add(0.01, context.window)
             wm.modal_handler_add(self)
@@ -1125,7 +1247,7 @@ class SmoothShadingOperator(bpy.types.Operator):
 
 bpy.types.Scene.smooth_shading_angle = FloatProperty(
                                        description='Smooth shading angle',
-                                       default=30,
+                                       default=60,
                                        min=0.0,
                                        max=180.0,
                                        precision=1,
@@ -1259,6 +1381,21 @@ class DeleteSelectionSetOperator(bpy.types.Operator):
             delete_selection_set(bpy.context.scene.selection_set)
         return {"FINISHED"}
 
+class OriginToSelectedVerticesOperator(bpy.types.Operator):
+    bl_idname = "object.origin_to_selected_vertex"
+    bl_label = "Origin to Selected"
+    bl_description = "Center the origin to the selected vertices"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        cursor_loc = bpy.context.scene.cursor_location
+        bpy.ops.view3d.snap_cursor_to_selected()
+        bpy.ops.object.editmode_toggle()
+        bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+        bpy.ops.object.editmode_toggle()
+        bpy.context.scene.cursor_location = cursor_loc
+        return {"FINISHED"}
+
 
 #-----------------------#
 #--- SubLayout Panel ---#
@@ -1266,8 +1403,8 @@ class DeleteSelectionSetOperator(bpy.types.Operator):
 class SubPanelObject(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "TOOLS"
-    bl_context = ""
-    bl_label = "Action"
+    bl_context = "mesh_edit"
+    bl_label = "Ultimate Toolbox"
 
     def draw(self, context):
         layout = self.layout
@@ -1275,16 +1412,20 @@ class SubPanelObject(bpy.types.Panel):
 
         col = layout.column(align=True)
         col.separator()
-        col.operator("object.rename_actions", text="Rename Action Tracks")
-        col.separator()
-        col.prop(bpy.context.scene, "action_group", text="")
-        #col.prop_search(scene, "action_string", scene, "ActionCollection", icon="ACTION")
-        col.separator()
-        col.prop(bpy.context.scene, "xscale", text="X")
-        col.prop(bpy.context.scene, "yscale", text="Y")
-        col.prop(bpy.context.scene, "zscale", text="Z")
+        col.operator("object.origin_to_selected_vertex", icon="LAYER_ACTIVE")
 
+class SubPanelObject(bpy.types.Panel):
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "TOOLS"
+    bl_context = "mesh_edit"
+    bl_label = "Ultimate Toolbox"
 
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+is_quick_align = False
+is_move_origin = False
 #-------------------------#
 #--- Main Layout Panel ---#
 #-------------------------#
@@ -1319,7 +1460,12 @@ class MainPanelObject(bpy.types.Panel):
         row = col.row(align=True)
         row.prop(bpy.context.scene, "edge_display_viewport", text="Edges", icon="MESH_GRID", toggle=True)
         row.operator("object.wireframe", text="Wire", icon="LATTICE_DATA")
-        #col.operator("object.align_objects", text="Quick Align")
+        col.separator()
+        col.separator()
+        if is_quick_align == False:
+            col.operator("object.align_objects", text="Quick Align", icon='NDOF_TURN')
+        else:
+            col.operator("object.align_objects", text="Quick Align", icon='ERROR')
         col.separator()
 
 
@@ -1338,7 +1484,7 @@ class MainPanelObject(bpy.types.Panel):
         row = split.row(align=True)
         row.operator("object.uv_unwrap_all", text="Quick Unwrap")
         row = split.row(align=True)
-        row.prop(bpy.context.scene, "uv_unwrap_angle", text="")
+        row.prop(bpy.context.scene, "uv_unwrap_angle", text='')
         col.separator()
         col.separator()
 
@@ -1346,7 +1492,10 @@ class MainPanelObject(bpy.types.Panel):
         col = box.column(align=True)
         row = box.row(align=True)
         #col.label('Pivot Point')
-        col.operator("object.move_origin", icon="OUTLINER_OB_EMPTY")
+        if is_move_origin == False:
+            col.operator("object.move_origin", icon="OUTLINER_OB_EMPTY")
+        else:
+            col.operator("object.move_origin", icon="ERROR")
         row = col.row(align=True)
         row.operator("object.origin_to_center", icon="LAYER_ACTIVE")
         row.operator("object.origin_selection", text="", icon="STICKY_UVS_DISABLE")
@@ -1396,22 +1545,28 @@ def register():
     bpy.utils.register_class(FlatShadingOperator)
     bpy.utils.register_class(SmoothShadingOperator)
     bpy.utils.register_class(DeleteSelectionSetOperator)
+    bpy.utils.register_class(OriginToSelectedVerticesOperator)
 
 
     #Keymaps
     wm = bpy.context.window_manager
     kc = wm.keyconfigs.addon
     km = wm.keyconfigs.addon.keymaps.new(name='Object Mode', space_type='EMPTY')
+    km2 = wm.keyconfigs.addon.keymaps.new(name='Window', space_type='EMPTY')
 
     # Keyboard Shortcuts
     kmi = km.keymap_items.new(WireFrameOperator.bl_idname, 'F3', 'PRESS', ctrl=False, shift=False)
     kmi = km.keymap_items.new(EdgeDisplayOperator.bl_idname, 'F4', 'PRESS', ctrl=False, shift=False)
     kmi = km.keymap_items.new(AlignObjectsOperator.bl_idname, 'Q', 'PRESS', ctrl=False, shift=True)
-    kmi = km.keymap_items.new(SaveNormalOperator.bl_idname, 'S', 'PRESS', ctrl=True, shift=False)
-    kmi = km.keymap_items.new(SaveBackupOperator.bl_idname, 'S', 'PRESS', ctrl=True, shift=True, alt=True)
     kmi = km.keymap_items.new(OverrideDeleteOperator.bl_idname, 'X', 'PRESS', ctrl=False, shift=False)
-    kmi = km.keymap_items.new(AutoKeyFrameOperator.bl_idname, 'A', 'PRESS', ctrl=True, shift=False, alt=True)
+    kmi = km.keymap_items.new(FlatShadingOperator.bl_idname, 'F', 'PRESS', ctrl=False, shift=False, alt=False)
+    kmi = km.keymap_items.new(SmoothShadingOperator.bl_idname, 'F', 'PRESS', ctrl=True, shift=False, alt=False)
     addon_keymaps.append(km)
+
+    kmi2 = km2.keymap_items.new(SaveNormalOperator.bl_idname, 'S', 'PRESS', ctrl=True, shift=False)
+    kmi2 = km2.keymap_items.new(SaveBackupOperator.bl_idname, 'S', 'PRESS', ctrl=True, shift=True, alt=True)
+    kmi2 = km2.keymap_items.new(AutoKeyFrameOperator.bl_idname, 'A', 'PRESS', ctrl=True, shift=False, alt=True)
+    addon_keymaps.append(km2)
 
 def unregister():
 
@@ -1435,3 +1590,4 @@ def unregister():
     bpy.utils.unregister_class(FlatShadingOperator)
     bpy.utils.unregister_class(SmoothShadingOperator)
     bpy.utils.unregister_class(DeleteSelectionSetOperator)
+    bpy.utils.unregister_class(OriginToSelectedVerticesOperator)

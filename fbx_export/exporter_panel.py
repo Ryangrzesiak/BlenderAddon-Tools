@@ -73,6 +73,16 @@ class FileImporterOperator(bpy.types.Operator, ImportHelper):
                     obj.animation_data.action.name = file.name.split('.')[0]
         return {"FINISHED"}
 
+imported_list = [
+    ('No Animation', 'No Animation', "", 1),
+    ('Combined File', 'Combined File', "", 2),
+    ('Seperate Files', 'Seperate Files', "", 3),
+    ]
+
+
+bpy.types.Scene.imported_files = EnumProperty(items=imported_list, name='Animation Mode')
+
+
 class UnityPrepOperator(bpy.types.Operator):
     bl_idname = "object.unityprep"
     bl_label = "Unity Model Prep"
